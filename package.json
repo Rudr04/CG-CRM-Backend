@@ -1,0 +1,17 @@
+{
+  "name": "cosmoguru-webhook",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google-cloud/datastore": "^7.0.0",
+    "googleapis": "^126.0.0",
+    "axios": "^1.6.0",
+    "firebase-admin": "^12.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "scripts": {
+    "start": "functions-framework --target=webhook",
+    "deploy": "gcloud functions deploy cosmoguru-webhook --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point webhook --region asia-south1"
+  }
+}
