@@ -7,13 +7,7 @@ let sheets;
 
 async function getSheets() {
   if (!sheets) {
-    const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './service-account-key.json';
-    const fs = require('fs');
-    if (!fs.existsSync(keyPath)) {
-      throw new Error(`Service account key not found at: ${keyPath}`);
-    }
     const auth = new google.auth.GoogleAuth({
-      keyFile: keyPath,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     sheets = google.sheets({ version: 'v4', auth });
