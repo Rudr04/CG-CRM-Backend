@@ -26,7 +26,7 @@ async function handleNewContact(params) {
     console.warn('[Smartflo] Skipped â€” no waId on params');
   }
   
-  await FirestoreService.createOrUpdateLead(params);
+  await FirestoreService.createLead(params);
   return await WatiService.setWaidAttribute(params);
   //await SheetService.insertNewContact(params);
 }
