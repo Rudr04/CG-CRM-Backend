@@ -2,6 +2,9 @@ const SheetService = require('../services/sheetsService');
 const WatiService = require('../services/watiService');
 const FirebaseService = require('../services/firebaseService');
 const SmartfloService = require('../services/smartfloService');
+const FirestoreService = require('../services/firestoreService');
+
+const { FIRESTORE } = require('../config');
 
 function shouldAssignRobo(text) {
   if (!text) return false;
@@ -22,9 +25,9 @@ async function handleNewContact(params) {
   } else {
     console.warn('[Smartflo] Skipped â€” no waId on params');
   }
-
+  
+  await FirestoreService.createOrUpdateLead(params);
   return await WatiService.setWaidAttribute(params);
-
   //await SheetService.insertNewContact(params);
 }
 
