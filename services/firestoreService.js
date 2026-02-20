@@ -6,6 +6,7 @@
 // ============================================================================
 
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
 const config = require('../config');
 const { getLastTenDigits } = require('../utils/helpers');
 
@@ -23,7 +24,7 @@ function getDb() {
         databaseURL: config.FIREBASE.DATABASE_URL  // still needed for RTDB whitelist
       });
     }
-    db = admin.firestore();
+    db = getFirestore();
     console.log('[Firestore] Initialized');
   }
   return db;
