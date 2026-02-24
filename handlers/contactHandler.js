@@ -3,6 +3,12 @@ const WatiService = require('../services/watiService');
 const FirebaseService = require('../services/firebaseService');
 const SmartfloService = require('../services/smartfloService');
 const FirestoreService = require('../services/firestoreService');
+const {
+  ValidationError,
+  ExternalServiceError,
+  validateRequired,
+  validatePhoneNumber
+} = require('../lib/errorHandler');
 
 const { FIRESTORE } = require('../config');
 
@@ -13,22 +19,32 @@ function shouldAssignRobo(text) {
 }
 
 async function handleNewContact(params) {
-  console.log('New WATI Contact Found');
+  try {
+    console.log('New WATI Contact Found');
 
-  const phoneNumber = params.waId || '';
-  const name = params.senderName || '';
+    const phoneNumber = validatePhoneNumber(params.waId, { source: 'handleNewContact' });
+    const name = params.senderName || '';
 
-  if (phoneNumber) {
-    SmartfloService.createContact(phoneNumber, name, 'wati_new_contact')
-      .then(() => console.log(`[Smartflo] Contact synced for ${phoneNumber}`))
-      .catch(err  => console.error(`[Smartflo] Non-blocking sync error for ${phoneNumber}: ${err.message}`));
-  } else {
-    console.warn('[Smartflo] Skipped â€” no waId on params');
+    // Non-blocking Smartflo sync
+    if (phoneNumber) {
+      SmartfloService.createContact(phoneNumber, name, 'wati_new_contact')
+        .then(() => console.log(`[Smartflo] Contact synced for ${phoneNumber}`))
+        .catch(err => console.error(`[Smartflo] Non-blocking sync error for ${phoneNumber}: ${err.message}`));
+    }
+
+    // Create lead in Firestore
+    try {
+      await FirestoreService.createLead(params);
+    } catch (err) {
+      console.warn(`[Firestore] Non-blocking create failed: ${err.message}`);
+    }
+
+    // Set WATI attribute
+    return await WatiService.setWaidAttribute(params);
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
+    throw new ExternalServiceError(error.message, 'WATI', { handler: 'handleNewContact' });
   }
-  
-  await FirestoreService.createLead(params);
-  return await WatiService.setWaidAttribute(params);
-  //await SheetService.insertNewContact(params);
 }
 
 async function handleInterestedUser(params) {
@@ -48,9 +64,12 @@ async function handleAdvertisementContact(params) {
 async function handleWebForm(params) {
   try {
     console.log('Web Form Submission received');
+    validateRequired(params, ['name', 'phone'], { source: 'handleWebForm' });
+    const phoneNumber = validatePhoneNumber(params.phone, { source: 'handleWebForm' });
+
     const contactData = {
       senderName: params.name || '',
-      waId: params.phone || '',
+      waId: phoneNumber,
       location: params.state || '',
       source: 'CGI Web Form',
       product: 'CGI',
@@ -60,8 +79,9 @@ async function handleWebForm(params) {
     };
     return await SheetService.insertNewContact(contactData);
   } catch (error) {
+    if (error instanceof ValidationError) throw error;
     console.error('Web form error:', error.message);
-    throw error;
+    throw new ExternalServiceError(error.message, 'Sheet', { handler: 'handleWebForm' });
   }
 }
 
@@ -83,9 +103,12 @@ async function handleKeywordContact(params) {
 async function handleManualEntry(params) {
   try {
     console.log('Processing manual entry from AppScript');
+    validateRequired(params, ['senderName', 'waId'], { source: 'handleManualEntry' });
+    const phoneNumber = validatePhoneNumber(params.waId, { source: 'handleManualEntry' });
+
     const contactParams = {
       senderName: params.senderName || '',
-      waId: params.waId || '',
+      waId: phoneNumber,
       sourceUrl: params.source || 'Manual Entry',
       remark: params.remark || '',
       text: '',
@@ -101,79 +124,69 @@ async function handleManualEntry(params) {
       row: result.row
     };
   } catch (error) {
+    if (error instanceof ValidationError) throw error;
     console.error('Manual entry error:', error.message);
-    return {
-      status: 'error',
-      message: error.message
-    };
+    throw new ExternalServiceError(error.message, 'Sheet', { handler: 'handleManualEntry' });
   }
 }
 
-// âœ… UPDATED: Registration check handler with proper messaging
+// ✅ UPDATED: Registration check handler with proper error handling
 async function handleRegistrationCheck(params) {
-  const waId = params.waId || '';
-  const senderName = params.senderName || '';
+  try {
+    const waId = validatePhoneNumber(params.waId, { source: 'handleRegistrationCheck' });
+    const senderName = params.senderName || '';
 
-  console.log(`Registration check for: ${waId}`);
+    console.log(`Registration check for: ${waId}`);
 
-  if (!waId) {
-    console.error('Registration check: waId missing');
-    return { message: 'waId missing' };
-  }
+    // Check if number exists in FirebaseWhitelist sheet
+    const registeredNumber = await SheetService.checkFirebaseWhitelist(waId);
 
-  // Check if number exists in FirebaseWhitelist sheet
-  // Returns registered number if found, null if not found
-  const registeredNumber = await SheetService.checkFirebaseWhitelist(waId);
+    if (registeredNumber) {
+      console.log(`${waId} already whitelisted with registered number: ${registeredNumber}`);
+      await WatiService.sendSessionMessage(
+        waId,
+        `*${registeredNumber}* is your registration number\n\nUse this to join the MasterClass\n\nCosmoGuru.live`
+      );
+      return { message: 'already_whitelisted', registeredNumber };
+    }
 
-  if (registeredNumber) {
-    // Already registered - send them their registered number
-    console.log(`${waId} already whitelisted with registered number: ${registeredNumber}`);
-    
+    // Not found – add to Firebase whitelist
+    console.log(`${waId} not whitelisted – adding now`);
+    try {
+      await FirebaseService.addToWhitelist(waId, senderName || waId, 'self_registration');
+      console.log(`${waId} added to Firebase whitelist`);
+    } catch (fbError) {
+      console.error(`Firebase whitelist error for ${waId}: ${fbError.message}`);
+    }
+
+    // Send session message
     await WatiService.sendSessionMessage(
       waId,
-      `*${registeredNumber}* is your registration number\n\nUse this to join the MasterClass\n\nCosmoGuru.live`
+      `You were not registered in our system,\nbut we have registered you right now *${waId}*.\n\n*You are now Registered! ✓*`
     );
 
-    return { message: 'already_whitelisted', registeredNumber };
+    return { message: 'registered_and_notified' };
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
+    console.error('Registration check error:', error.message);
+    throw new ExternalServiceError(error.message, 'Registration', { handler: 'handleRegistrationCheck' });
   }
-
-  // Not found â€” add to Firebase whitelist now
-  console.log(`${waId} not whitelisted â€” adding now`);
-  try {
-    await FirebaseService.addToWhitelist(waId, senderName || waId, 'self_registration');
-    console.log(`${waId} added to Firebase whitelist`);
-  } catch (fbError) {
-    // Don't block the message even if Firebase fails
-    console.error(`Firebase whitelist error for ${waId}: ${fbError.message}`);
-  }
-
-  // Send session message informing them they're now registered
-  await WatiService.sendSessionMessage(
-    waId,
-    `You were not registered in our system,\nbut we have registered you right now *${waId}*.\n\n*You are now Registered! âœ…*`
-  );
-
-  return { message: 'registered_and_notified' };
 }
 
-// Add this new function before module.exports
+// ✅ UPDATED: User login handler with proper error handling
 async function handleUserLogin(params) {
   try {
     console.log('User login event received from CosmoGuru Live');
-    
+
     const phone = params.data?.phone || '';
     const name = params.data?.name || '';
     const loginTimestamp = params.data?.loginTimestamp || '';
 
-    if (!phone) {
-      console.error('User login: phone missing');
-      return { message: 'phone missing' };
-    }
-
-    console.log(`Processing login for: ${phone} (${name})`);
+    const phoneNumber = validatePhoneNumber(phone, { source: 'handleUserLogin' });
+    console.log(`Processing login for: ${phoneNumber} (${name})`);
 
     // Update attendance in sheet
-    const result = await SheetService.updateAttendance(phone, name, loginTimestamp);
+    const result = await SheetService.updateAttendance(phoneNumber, name, loginTimestamp);
 
     return {
       status: 'success',
@@ -182,11 +195,9 @@ async function handleUserLogin(params) {
     };
 
   } catch (error) {
+    if (error instanceof ValidationError) throw error;
     console.error('User login error:', error.message);
-    return {
-      status: 'error',
-      message: error.message
-    };
+    throw new ExternalServiceError(error.message, 'Attendance', { handler: 'handleUserLogin' });
   }
 }
 
