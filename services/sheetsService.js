@@ -1,3 +1,12 @@
+// ============================================================================
+//  sheetsService.js — Google Sheets CRUD + Firestore parallel writes
+//
+//  PATTERN:
+//  - Sheet write is primary (must succeed)
+//  - Firestore write is fire-and-forget (non-blocking)
+//  - Firestore uses auto-ID with cgId business reference
+// ============================================================================
+
 const { google } = require('googleapis');
 const config = require('../config');
 const { formatDate, getLastTenDigits, phoneNumbersMatch } = require('../utils/helpers');
@@ -16,13 +25,23 @@ async function getSheets() {
   return sheets;
 }
 
+
 // ─────────────────────────────────────────────────────────────
 //  Helper: Fire-and-forget Firestore write (non-blocking)
 //  Logs errors but never throws — Sheet operations are unaffected
 // ─────────────────────────────────────────────────────────────
 function fireAndForgetFirestore(fn) {
   if (!config.FIRESTORE.ENABLED) return;
-  fn().catch(err => console.error(`[Firestore parallel] ${err.message}`));
+  
+  fn()
+    .then(result => {
+      if (result && result.cgId) {
+        console.log(`[Firestore parallel] Success: ${result.cgId}`);
+      }
+    })
+    .catch(err => {
+      console.error(`[Firestore parallel] ${err.message}`);
+    });
 }
 
 
@@ -65,7 +84,7 @@ async function insertNewContact(params) {
       const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
       const newRemark = currentRemark ? `${currentRemark} | ${remark}` : remark;
       updates.push({
-        range: `${sheetName}!N${existingContact.row}`,
+        range: `${sheetName}!O${existingContact.row}`,
         values: [[newRemark]]
       });
     }
@@ -108,7 +127,7 @@ async function insertNewContact(params) {
   const options = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
   const timeOnly = new Intl.DateTimeFormat('en-IN', options).format(now);
 
-  const rowData = Array(24).fill('');
+  const rowData = Array(27).fill('');
   rowData[config.SHEET_COLUMNS.CGILN]     = '=ROW()-1+230000';
   rowData[config.SHEET_COLUMNS.DATE]      = date;
   rowData[config.SHEET_COLUMNS.TIME]      = timeOnly;
@@ -128,7 +147,7 @@ async function insertNewContact(params) {
   try {
     await api.spreadsheets.values.append({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A:Z`,
+      range: `${sheetName}!A:AA`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] }
     });
@@ -138,7 +157,7 @@ async function insertNewContact(params) {
     throw error;
   }
 
-  // ── Firestore parallel: create new lead ──
+  // ── Firestore parallel: create new lead (with auto cgId) ──
   fireAndForgetFirestore(() => FirestoreService.createLead({
     phone:    waId,
     name:     senderName,
@@ -173,6 +192,7 @@ async function insertNewContactManual(params) {
   const remark = params.remark || '';
 
   const existingContact = await findUserByPhoneNumber(waId);
+  
   if (existingContact) {
     console.log(`Contact ${waId} exists at row ${existingContact.row}`);
 
@@ -182,7 +202,7 @@ async function insertNewContactManual(params) {
       const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
       const newRemark = currentRemark ? `${currentRemark} | ${remark}` : remark;
       updates.push({
-        range: `${sheetName}!N${existingContact.row}`,
+        range: `${sheetName}!O${existingContact.row}`,
         values: [[newRemark]]
       });
     }
@@ -194,7 +214,7 @@ async function insertNewContactManual(params) {
       });
     }
 
-    // ── Firestore parallel: update existing ──
+    // ── Firestore parallel ──
     fireAndForgetFirestore(() => FirestoreService.createOrUpdateLead({
       phone: waId,
       name: senderName,
@@ -210,6 +230,7 @@ async function insertNewContactManual(params) {
     return { message: 'Existing contact updated', row: existingContact.row };
   }
 
+  // ── New contact ──
   const response = await api.spreadsheets.values.get({
     spreadsheetId: config.SPREADSHEET_ID,
     range: `${sheetName}!A2:Z`
@@ -255,14 +276,14 @@ async function insertNewContactManual(params) {
 
   await api.spreadsheets.values.append({
     spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A:Z`,
+    range: `${sheetName}!A:AA`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [rowData] }
   });
   
   console.log(`Manual inquiry appended at row ${nextRow}`);
 
-  // ── Firestore parallel: create new lead ──
+  // ── Firestore parallel (with auto cgId) ──
   fireAndForgetFirestore(() => FirestoreService.createLead({
     phone:    waId,
     name:     senderName,
@@ -276,147 +297,29 @@ async function insertNewContactManual(params) {
     channel:  'manual_entry'
   }));
 
-  return { message: 'Manual inquiry created', row: nextRow };
+  return { message: 'Manual entry created', row: nextRow };
 }
 
 
 // ═════════════════════════════════════════════════════════════
-//  UPDATE FORM DATA (WhatsApp flow form submission)
-// ═════════════════════════════════════════════════════════════
-async function updateFormData(params) {
-  const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
-  
-  const waId = params.wa_num || '';
-  const option = params.option || '';
-  const formNum = params.form_num || '';
-  const name = params.name || '';
-
-  if (!waId) throw new Error('wa_num is missing');
-
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
-
-  const rows = response.data.values || [];
-  const matchingRowIndex = rows.findIndex(row => 
-    row[config.SHEET_COLUMNS.NUMBER]?.toString() === waId.toString()
-  );
-
-  if (matchingRowIndex === -1) throw new Error('No match found');
-
-  const targetRow = matchingRowIndex + 2;
-  const statusValue = option === "Offline (અમદાવાદ ક્લાસ માં)" ? "Ahm MC Link Sent" : "Online MC Link Sent";
-
-  await api.spreadsheets.values.batchUpdate({
-    spreadsheetId: config.SPREADSHEET_ID,
-    requestBody: {
-      valueInputOption: 'RAW',
-      data: [
-        { range: `${sheetName}!D${targetRow}`, values: [[name]] },
-        { range: `${sheetName}!F${targetRow}`, values: [[formNum]] },
-        { range: `${sheetName}!L${targetRow}`, values: [[statusValue]] }
-      ]
-    }
-  });
-
-  console.log(`Form data updated: name=${name}, formNum=${formNum}, status=${statusValue}`);
-
-  // ── Firestore parallel: update form data ──
-  fireAndForgetFirestore(() => FirestoreService.updateLead(waId, {
-    name:   name,
-    regiNo: formNum,
-    status: statusValue
-  }, {
-    action:  'form_submitted',
-    by:      'system',
-    details: { formNum, option, statusValue }
-  }));
-
-  return true;
-}
-
-
-// ═════════════════════════════════════════════════════════════
-//  HANDLE COMMUNITY JOIN
-// ═════════════════════════════════════════════════════════════
-async function handleCommunityJoin(params) {
-  const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
-  
-  const phoneNumber = params.wa_num || '';
-  if (!phoneNumber) throw new Error('Phone missing');
-
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
-
-  const rows = response.data.values || [];
-  const matchingRowIndex = rows.findIndex(row => 
-    getLastTenDigits(row[config.SHEET_COLUMNS.NUMBER]?.toString() || '') === getLastTenDigits(phoneNumber)
-  );
-
-  if (matchingRowIndex === -1) return { message: 'Phone not found' };
-
-  const targetRow = matchingRowIndex + 2;
-  const currentStatus = rows[matchingRowIndex][config.SHEET_COLUMNS.STATUS] || '';
-  const currentTeam   = rows[matchingRowIndex][config.SHEET_COLUMNS.TEAM]   || '';
-
-  const isOnline = currentStatus.includes('Online');
-  const statusValue = isOnline ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
-
-  const updates = [{ range: `${sheetName}!L${targetRow}`, values: [[statusValue]] }];
-
-  if (currentTeam === 'Not Assigned') {
-    updates.push({ range: `${sheetName}!K${targetRow}`, values: [['ROBO']] });
-  }
-
-  await api.spreadsheets.values.batchUpdate({
-    spreadsheetId: config.SPREADSHEET_ID,
-    requestBody: { valueInputOption: 'RAW', data: updates }
-  });
-
-  console.log(`Community join tracked: ${phoneNumber}, status=${statusValue}`);
-
-  // ── Firestore parallel: update status ──
-  const firestoreUpdates = { status: statusValue };
-  if (currentTeam === 'Not Assigned') {
-    firestoreUpdates.agent = 'ROBO';
-    firestoreUpdates.stage = 'ROBO';
-  }
-  fireAndForgetFirestore(() => FirestoreService.updateLead(phoneNumber, firestoreUpdates, {
-    action:  'community_joined',
-    by:      'system',
-    details: { statusValue, groupType: isOnline ? 'online' : 'ahmedabad' }
-  }));
-
-  return { message: 'Click tracked', row: targetRow };
-}
-
-
-// ═════════════════════════════════════════════════════════════
-//  FIND USER BY PHONE NUMBER (unchanged — still Sheet-based)
-//  Phase 2 will swap this to Firestore lookup
+//  FIND USER BY PHONE NUMBER
 // ═════════════════════════════════════════════════════════════
 async function findUserByPhoneNumber(phoneNumber) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
+
   const response = await api.spreadsheets.values.get({
     spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
+    range: `${sheetName}!A2:AA`
   });
 
   const rows = response.data.values || [];
-  
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const registeredNum = row[config.SHEET_COLUMNS.NUMBER]  || '';
-    const otherNum      = row[config.SHEET_COLUMNS.REGI_NO] || '';
+  const searchPhone = getLastTenDigits(phoneNumber);
 
-    if (phoneNumbersMatch(phoneNumber, registeredNum) || phoneNumbersMatch(phoneNumber, otherNum)) {
-      return { row: i + 2, data: row };
+  for (let i = 0; i < rows.length; i++) {
+    const rowPhone = rows[i][config.SHEET_COLUMNS.NUMBER] || '';
+    if (phoneNumbersMatch(rowPhone, searchPhone)) {
+      return { row: i + 2, data: rows[i] };
     }
   }
 
@@ -425,7 +328,74 @@ async function findUserByPhoneNumber(phoneNumber) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  CHECK FIREBASE WHITELIST (unchanged)
+//  UPDATE FORM DATA
+// ═════════════════════════════════════════════════════════════
+async function updateFormData(params) {
+  const api = await getSheets();
+  const sheetName = config.SHEETS.DSR;
+
+  const phoneNumber = params.form_num || params.wa_num;
+  const userMatch = await findUserByPhoneNumber(phoneNumber);
+
+  if (!userMatch) {
+    throw new Error('No match found');
+  }
+
+  const updates = [];
+  const rowNum = userMatch.row;
+
+  // Name
+  if (params.name) {
+    updates.push({
+      range: `${sheetName}!D${rowNum}`,
+      values: [[params.name]]
+    });
+  }
+
+  // Registration number
+  if (params.form_num) {
+    updates.push({
+      range: `${sheetName}!F${rowNum}`,
+      values: [[params.form_num]]
+    });
+  }
+
+  // Product/Option
+  if (params.option) {
+    const currentProduct = userMatch.data[config.SHEET_COLUMNS.PRODUCT] || '';
+    const newProduct = currentProduct 
+      ? `${currentProduct}, ${params.option}` 
+      : params.option;
+    updates.push({
+      range: `${sheetName}!H${rowNum}`,
+      values: [[newProduct]]
+    });
+  }
+
+  if (updates.length > 0) {
+    await api.spreadsheets.values.batchUpdate({
+      spreadsheetId: config.SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data: updates }
+    });
+  }
+
+  // ── Firestore parallel ──
+  fireAndForgetFirestore(() => FirestoreService.updateLead(phoneNumber, {
+    name: params.name || '',
+    regiNo: params.form_num || '',
+    product: params.option || ''
+  }, {
+    action: 'form_submitted',
+    by: 'customer',
+    details: { form: 'whatsapp_flow' }
+  }));
+
+  return { message: 'Form data updated', row: rowNum };
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  CHECK FIREBASE WHITELIST (from OnlineAttendence sheet)
 // ═════════════════════════════════════════════════════════════
 async function checkFirebaseWhitelist(phoneNumber) {
   const api = await getSheets();
@@ -434,24 +404,23 @@ async function checkFirebaseWhitelist(phoneNumber) {
   try {
     const response = await api.spreadsheets.values.get({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!E:F`
+      range: `${sheetName}!A:F`
     });
 
     const rows = response.data.values || [];
-    const last10 = getLastTenDigits(phoneNumber);
+    const searchPhone = getLastTenDigits(phoneNumber);
 
     for (const row of rows) {
-      const mainNumber = String(row[0] || '').trim();
-      const regiNumber = String(row[1] || '').trim();
-      
-      if (mainNumber && getLastTenDigits(mainNumber) === last10) {
-        const registeredNumber = regiNumber || mainNumber;
-        console.log(`Whitelist match found for ${phoneNumber}, registered number: ${registeredNumber}`);
-        return registeredNumber;
+      // Check columns that might contain phone numbers
+      for (let col = 0; col < row.length; col++) {
+        const cellValue = row[col] || '';
+        if (phoneNumbersMatch(cellValue, searchPhone)) {
+          // Return the registered number (usually in column E or F)
+          return row[4] || row[5] || cellValue;
+        }
       }
     }
 
-    console.log(`No whitelist match for ${phoneNumber}`);
     return null;
   } catch (error) {
     console.error(`checkFirebaseWhitelist error: ${error.message}`);
@@ -461,40 +430,71 @@ async function checkFirebaseWhitelist(phoneNumber) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  UPDATE ATTENDANCE (unchanged)
+//  HANDLE COMMUNITY JOIN
+// ═════════════════════════════════════════════════════════════
+async function handleCommunityJoin(params) {
+  const phoneNumber = params.waId || params.phone;
+  const userMatch = await findUserByPhoneNumber(phoneNumber);
+
+  if (!userMatch) {
+    console.log(`Community join: ${phoneNumber} not found in sheet`);
+    return { message: 'User not found' };
+  }
+
+  const api = await getSheets();
+  const sheetName = config.SHEETS.DSR;
+
+  await api.spreadsheets.values.update({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!U${userMatch.row}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [['Joined']] }
+  });
+
+  // ── Firestore parallel ──
+  fireAndForgetFirestore(() => FirestoreService.addHistory(
+    phoneNumber, 
+    'community_joined', 
+    'system',
+    { group: params.groupName || 'unknown' }
+  ));
+
+  return { message: 'Community join recorded', row: userMatch.row };
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  UPDATE ATTENDANCE
 // ═════════════════════════════════════════════════════════════
 async function updateAttendance(phoneNumber, name, loginTimestamp) {
   const api = await getSheets();
   const sheetName = config.SHEETS.FIREBASE_WHITELIST;
 
   try {
-    const searchResponse = await api.spreadsheets.values.get({
+    const response = await api.spreadsheets.values.get({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!E2:F`
+      range: `${sheetName}!A2:L`
     });
 
-    const searchRows = searchResponse.data.values || [];
+    const rows = response.data.values || [];
+    const searchPhone = getLastTenDigits(phoneNumber);
+
     let foundRow = null;
-    let fullRowData = null;
+    let fullRowData = [];
 
-    for (let i = 0; i < searchRows.length; i++) {
-      const numberCol = searchRows[i][0] || '';
-      const regiCol   = searchRows[i][1] || '';
-
-      if (phoneNumbersMatch(phoneNumber, numberCol) || phoneNumbersMatch(phoneNumber, regiCol)) {
-        foundRow = i + 2;
-        
-        const fullRowResponse = await api.spreadsheets.values.get({
-          spreadsheetId: config.SPREADSHEET_ID,
-          range: `${sheetName}!A${foundRow}:L${foundRow}`
-        });
-        fullRowData = fullRowResponse.data.values?.[0] || [];
-        break;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      for (let col = 0; col < Math.min(row.length, 6); col++) {
+        if (phoneNumbersMatch(row[col] || '', searchPhone)) {
+          foundRow = i + 2;
+          fullRowData = row;
+          break;
+        }
       }
+      if (foundRow) break;
     }
 
     const loginDate = new Date(loginTimestamp);
-    const formattedDate = formatDate(loginDate);
     const formattedTime = loginDate.toLocaleTimeString('en-IN', {
       timeZone: 'Asia/Kolkata',
       hour12: false,
@@ -509,8 +509,6 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
     };
 
     if (foundRow) {
-      console.log(`Found user at row ${foundRow}, updating attendance`);
-
       const currentAttendance = fullRowData[11] || '';
       const updatedAttendance = buildAttendance(currentAttendance);
 
@@ -518,25 +516,26 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
         spreadsheetId: config.SPREADSHEET_ID,
         range: `${sheetName}!L${foundRow}`,
         valueInputOption: 'RAW',
-        requestBody: {
-          values: [[updatedAttendance]]
-        }
+        requestBody: { values: [[updatedAttendance]] }
       });
 
-      console.log(`Attendance updated for ${phoneNumber} at row ${foundRow}`);
+      // ── Firestore parallel ──
+      fireAndForgetFirestore(() => FirestoreService.addHistory(
+        phoneNumber,
+        'attendance_marked',
+        'system',
+        { time: formattedTime, timestamp: loginTimestamp }
+      ));
 
       return {
         found: true,
         action: 'updated',
         row: foundRow,
-        name: fullRowData[3] || name,
-        attendance: updatedAttendance,
-        message: 'Attendance marked as Present'
+        attendance: updatedAttendance
       };
 
     } else {
-      console.log(`User not found, creating new entry for ${phoneNumber}`);
-
+      // Create new entry
       const allRowsResponse = await api.spreadsheets.values.get({
         spreadsheetId: config.SPREADSHEET_ID,
         range: `${sheetName}!A2:A`
@@ -575,20 +574,14 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
         spreadsheetId: config.SPREADSHEET_ID,
         range: `${sheetName}!A:L`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: {
-          values: [newRowData]
-        }
+        requestBody: { values: [newRowData] }
       });
-
-      console.log(`New entry created for ${phoneNumber} at row ${nextRow}`);
 
       return {
         found: false,
         action: 'created',
         row: nextRow,
-        name: name,
-        attendance: attendanceValue,
-        message: 'New entry created with attendance marked'
+        attendance: attendanceValue
       };
     }
 
@@ -597,6 +590,7 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
     throw error;
   }
 }
+
 
 module.exports = {
   insertNewContact,

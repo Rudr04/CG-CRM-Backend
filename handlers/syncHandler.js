@@ -2,6 +2,11 @@
 //  syncHandler.js — Sheet → Firestore real-time sync
 //  Receives edit events from Apps Script onEdit trigger
 //  Updates Firestore document + adds history entry
+//
+//  ERROR HANDLING:
+//  - Returns detailed results including failed edits
+//  - Apps Script can retry failed edits
+//  - Optionally stores failures in Firestore for tracking
 // ============================================================
 
 const FirestoreService = require('../services/firestoreService');
@@ -28,50 +33,139 @@ const APPEND_FIELDS = ['remark', 'remark_2'];
 
 // ─────────────────────────────────────────────────────────────
 //  HANDLE SHEET EDIT — main entry point
-//  Payload: { eventType: 'sheet_edit', edits: [...], editor, timestamp }
+//  Payload: { eventType: 'sheet_edit', edits: [...], editor, timestamp, isRetry }
+//  
+//  Returns: { synced, errors, failed: [...] }
+//  - failed array contains edits that couldn't be processed
+//  - Apps Script will store these in dead letter queue
 // ─────────────────────────────────────────────────────────────
 async function handleSheetEdit(params) {
   const edits  = params.edits || [];
   const editor = params.editor || 'unknown';
+  const isRetry = params.isRetry || false;
 
   if (edits.length === 0) {
-    return { message: 'No edits to process' };
+    return { synced: 0, errors: 0, failed: [], message: 'No edits to process' };
   }
 
-  console.log(`[Sync] Processing ${edits.length} edit(s) from ${editor}`);
+  console.log(`[Sync] Processing ${edits.length} edit(s) from ${editor}${isRetry ? ' (RETRY)' : ''}`);
 
-  const results = { synced: 0, skipped: 0, errors: 0 };
+  const results = { 
+    synced: 0, 
+    errors: 0, 
+    failed: [],
+    details: []
+  };
 
   for (const edit of edits) {
     try {
-      await processEdit(edit, editor);
-      results.synced++;
+      const result = await processEdit(edit, editor);
+      
+      if (result.success) {
+        results.synced++;
+        results.details.push({
+          phone: edit.phone,
+          field: edit.field,
+          status: 'synced',
+          cgId: result.cgId
+        });
+      } else {
+        // Soft failure (e.g., validation issue)
+        results.errors++;
+        edit.failReason = result.reason || 'unknown';
+        results.failed.push(edit);
+        results.details.push({
+          phone: edit.phone,
+          field: edit.field,
+          status: 'failed',
+          reason: result.reason
+        });
+      }
+      
     } catch (error) {
+      // Hard failure (exception)
       console.error(`[Sync] Error processing edit for ${edit.phone}: ${error.message}`);
       results.errors++;
+      
+      // Increment retry count and add to failed list
+      edit.retryCount = (edit.retryCount || 0) + 1;
+      edit.failReason = error.message;
+      edit.lastError = error.message;
+      results.failed.push(edit);
+      
+      results.details.push({
+        phone: edit.phone,
+        field: edit.field,
+        status: 'error',
+        reason: error.message
+      });
+      
+      // Store in Firestore for tracking (non-blocking)
+      FirestoreService.storeSyncFailure(edit, error).catch(() => {});
     }
   }
 
-  console.log(`[Sync] Done: ${results.synced} synced, ${results.skipped} skipped, ${results.errors} errors`);
-  return results;
+  console.log(`[Sync] Done: ${results.synced} synced, ${results.errors} errors, ${results.failed.length} failed`);
+  
+  return {
+    synced: results.synced,
+    errors: results.errors,
+    failed: results.failed,
+    message: `Processed ${edits.length} edit(s)`
+  };
 }
 
 
 // ─────────────────────────────────────────────────────────────
 //  PROCESS SINGLE EDIT
+//  Returns: { success: true, cgId } or { success: false, reason }
 // ─────────────────────────────────────────────────────────────
 async function processEdit(edit, editor) {
-  const { phone, field, oldValue, newValue, action } = edit;
+  const { phone, field, oldValue, newValue, action, row } = edit;
 
+  // ── Validation ──
   if (!phone) {
     console.warn('[Sync] Edit skipped — no phone number');
-    return;
+    return { success: false, reason: 'no_phone' };
+  }
+
+  const phoneNorm = FirestoreService.normalizePhone(phone);
+  if (!phoneNorm || phoneNorm.length < 10) {
+    console.warn(`[Sync] Edit skipped — invalid phone: ${phone}`);
+    return { success: false, reason: 'invalid_phone' };
   }
 
   const firestoreField = FIELD_MAP[field];
   if (!firestoreField) {
-    console.warn(`[Sync] Unknown field: ${field}`);
-    return;
+    console.warn(`[Sync] Unknown field mapping: ${field}`);
+    return { success: false, reason: 'unknown_field' };
+  }
+
+  // ── Check if lead exists ──
+  let existing = await FirestoreService.findLeadByPhone(phone);
+  
+  // If lead doesn't exist, create it first
+  if (!existing) {
+    console.log(`[Sync] Lead ${phoneNorm} not in Firestore — creating new entry`);
+    
+    const createResult = await FirestoreService.createLead({
+      phone:   phone,
+      name:    '',
+      status:  field === 'status' ? newValue : 'Lead',
+      team:    field === 'team' ? newValue : config.STAGES.NOT_ASSIGNED,
+      source:  'sheet_backfill',
+      channel: 'sheet_sync',
+      sheetRow: row
+    });
+    
+    if (!createResult) {
+      return { success: false, reason: 'create_failed' };
+    }
+    
+    existing = await FirestoreService.findLeadByPhone(phone);
+    if (!existing) {
+      return { success: false, reason: 'create_verification_failed' };
+    }
   }
 
   // ── Build Firestore update ──
@@ -80,9 +174,6 @@ async function processEdit(edit, editor) {
 
   // ── Special handling for Team (claiming) ──
   if (field === 'team') {
-    // Agent changed Team column
-    // "Not Assigned" → agent name = claiming
-    // Agent name → different name = reassignment
     const isNotAssigned = !newValue || newValue === config.STAGES.NOT_ASSIGNED;
     updates.agent = newValue || config.STAGES.NOT_ASSIGNED;
     updates.stage = isNotAssigned ? config.STAGES.NOT_ASSIGNED : config.STAGES.AGENT_WORKING;
@@ -92,51 +183,69 @@ async function processEdit(edit, editor) {
   const historyEntry = {
     action:  action || 'field_updated',
     by:      resolveAttributor(editor, field, newValue),
-    details: {}
+    details: buildHistoryDetails(field, oldValue, newValue)
   };
-
-  // Add old/new to history where meaningful
-  if (field === 'team') {
-    historyEntry.details.from = oldValue || config.STAGES.NOT_ASSIGNED;
-    historyEntry.details.to   = newValue || config.STAGES.NOT_ASSIGNED;
-  } else if (field === 'status') {
-    historyEntry.details.from = oldValue || '';
-    historyEntry.details.to   = newValue || '';
-  } else if (field === 'rating') {
-    historyEntry.details.rating = newValue || '';
-  } else if (field === 'remark' || field === 'remark_2') {
-    historyEntry.details.text = (newValue || '').substring(0, 200);
-  }
 
   // ── Update Firestore ──
   const result = await FirestoreService.updateLead(phone, updates, historyEntry);
 
   if (!result) {
-    // Document doesn't exist in Firestore yet — create it
-    // This handles leads that were created before Phase 1 deployment
-    console.log(`[Sync] Lead ${phone} not in Firestore — creating stub`);
-    await FirestoreService.createLead({
-      phone:   phone,
-      name:    '',      // Will be filled by next full-row sync or form data
-      status:  field === 'status' ? newValue : 'Lead',
-      team:    field === 'team' ? newValue : config.STAGES.NOT_ASSIGNED,
-      source:  'backfill_from_edit',
-      channel: 'sheet_edit'
-    });
-
-    // Retry the update now that doc exists
-    await FirestoreService.updateLead(phone, updates, historyEntry);
+    return { success: false, reason: 'update_failed' };
   }
 
-  console.log(`[Sync] ${phone}: ${field} → "${(newValue || '').substring(0, 50)}" by ${historyEntry.by}`);
+  console.log(`[Sync] ${existing.data.cgId}: ${field} → "${(newValue || '').substring(0, 50)}" by ${historyEntry.by}`);
+  
+  return { success: true, cgId: existing.data.cgId };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  BUILD HISTORY DETAILS — field-specific context
+// ─────────────────────────────────────────────────────────────
+function buildHistoryDetails(field, oldValue, newValue) {
+  const details = {};
+  
+  switch (field) {
+    case 'team':
+      details.from = oldValue || config.STAGES.NOT_ASSIGNED;
+      details.to   = newValue || config.STAGES.NOT_ASSIGNED;
+      break;
+      
+    case 'status':
+    case 'status_2':
+      details.from = oldValue || '';
+      details.to   = newValue || '';
+      break;
+      
+    case 'rating':
+      details.rating = newValue || '';
+      break;
+      
+    case 'remark':
+    case 'remark_2':
+      // Truncate long remarks in history
+      details.text = (newValue || '').substring(0, 200);
+      break;
+      
+    case 'name':
+      details.oldName = oldValue || '';
+      details.newName = newValue || '';
+      break;
+      
+    case 'location':
+      details.location = newValue || '';
+      break;
+      
+    default:
+      details.value = newValue || '';
+  }
+  
+  return details;
 }
 
 
 // ─────────────────────────────────────────────────────────────
 //  ATTRIBUTION: Decide who gets credit for this edit
-//  For team/claiming: use the new agent name (they're editing their own cell)
-//  For everything else: use the assigned agent from Firestore (default)
-//  Editor email is available as fallback
 // ─────────────────────────────────────────────────────────────
 function resolveAttributor(editor, field, newValue) {
   // Claiming: the agent IS the new value
@@ -144,8 +253,7 @@ function resolveAttributor(editor, field, newValue) {
     return newValue;
   }
 
-  // For other edits: use editor email (installable trigger provides this)
-  // This is the actual person who made the edit
+  // For other edits: use editor email
   return editor || 'unknown';
 }
 
