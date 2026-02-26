@@ -1,41 +1,53 @@
+// ============================================================================
+//  services/firebaseService.js — Firebase Realtime Database (Whitelist)
+//
+//  Handles whitelist operations only. Separate from Firestore (CRM).
+// ============================================================================
+
 const axios = require('axios');
 const config = require('../config');
+const { sanitizePhoneForFirebase, cleanString, nowISO } = require('../utils/helpers');
 
-/**
- * Add phone number to Firebase whitelist
- */
-async function addToWhitelist(phoneNumber, name, source = 'whatsapp_form') {
+const LOG_PREFIX = '[Firebase]';
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  WHITELIST OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function addToWhitelist(phoneNumber, name, source = 'unknown') {
+  if (!config.FIREBASE.DATABASE_URL || !config.FIREBASE.SECRET) {
+    console.log(`${LOG_PREFIX} Credentials not configured, skipping`);
+    return null;
+  }
+
+  const sanitizedPhone = sanitizePhoneForFirebase(phoneNumber);
+  const url = `${config.FIREBASE.DATABASE_URL}whitelist/${sanitizedPhone}.json?auth=${config.FIREBASE.SECRET}`;
+
   try {
-    if (!config.FIREBASE.DATABASE_URL || !config.FIREBASE.SECRET) {
-      console.log('Firebase credentials not configured, skipping whitelist sync');
-      return;
-    }
-
-    const sanitizedPhone = phoneNumber.toString()
-      .replace(/\s/g, '')
-      .replace(/^(?!\+)/, '+');
-
-    const url = `${config.FIREBASE.DATABASE_URL}whitelist/${sanitizedPhone}.json?auth=${config.FIREBASE.SECRET}`;
-
-    const payload = {
-      name: name.trim(),
-      source: source,
-      timestamp: new Date().toISOString()
-    };
-
-    const response = await axios.put(url, payload, {
+    const response = await axios.put(url, {
+      name: cleanString(name),
+      source,
+      timestamp: nowISO()
+    }, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 5000
+      timeout: config.TIMEOUTS.FIREBASE
     });
 
-    console.log(`âœ… Added to Firebase whitelist: ${sanitizedPhone}`);
+    console.log(`${LOG_PREFIX} Added to whitelist: ${sanitizedPhone}`);
     return response.data;
 
   } catch (error) {
-    console.error(`Firebase whitelist error: ${error.message}`);
-    // Don't throw - let form submission continue even if Firebase fails
+    console.error(`${LOG_PREFIX} Whitelist error: ${error.message}`);
     return null;
   }
 }
 
-module.exports = { addToWhitelist };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+module.exports = {
+  addToWhitelist
+};

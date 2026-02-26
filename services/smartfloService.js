@@ -1,79 +1,72 @@
+// ============================================================================
+//  services/smartfloService.js — Smartflo Calling API
+//
+//  Creates contacts in Smartflo for click-to-call.
+//  Uses centralized helpers and config.
+// ============================================================================
+
 const axios = require('axios');
 const config = require('../config');
+const { sanitizeName } = require('../utils/helpers');
+const { ConfigError, ExternalServiceError } = require('../lib/errorHandler');
 
-const SMARTFLO_BASE_URL = 'https://api-smartflo.tatateleservices.com';
+const LOG_PREFIX = '[Smartflo]';
 
-/**
- * Strips emojis and special characters that Smartflo rejects in the name field.
- * Keeps letters (including unicode/accented), numbers, spaces, and hyphens.
- * Falls back to phone number if name is empty after sanitization.
- *
- * Rejected chars per Smartflo error: !@#$%^&()_-+=:;\\,.></?|{}[]*
- */
-function sanitizeName(name) {
-  if (!name) return '';
-  return name
-    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') // strip emojis
-    .replace(/[!@#$%^&*()_+=:;\\,.></?|{}[\]]/g, '')                   // strip special chars
-    .replace(/\s+/g, ' ')                                                // collapse extra spaces
-    .trim();
-}
 
-/**
- * Creates a contact in a Smartflo contact group.
- *
- * Auth:     Static API key in Authorization header â€” no login needed.
- * Endpoint: POST /v1/contact/{contactGroupId}
- * Body:     { field_0: phoneNumber, field_1: name }
- *
- * Phone number is passed as-is from WATI (e.g. "918780524283") â€” already correct format.
- */
-async function createContact(phoneNumber, name) {
+// ═══════════════════════════════════════════════════════════════════════════
+//  CREATE CONTACT
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function createContact(phoneNumber, name, source = 'unknown') {
   if (!config.SMARTFLO.API_KEY) {
-    throw new Error('[Smartflo] SMARTFLO_API_KEY env var is not set');
+    throw new ConfigError('SMARTFLO_API_KEY not set');
   }
   if (!config.SMARTFLO.CONTACT_GROUP_ID) {
-    throw new Error('[Smartflo] SMARTFLO_CONTACT_GROUP_ID env var is not set');
+    throw new ConfigError('SMARTFLO_CONTACT_GROUP_ID not set');
   }
 
+  // Use centralized sanitizeName from helpers
   const contactName = sanitizeName(name) || phoneNumber;
-  const url = `${SMARTFLO_BASE_URL}/v1/contact/${config.SMARTFLO.CONTACT_GROUP_ID}`;
+  const url = `${config.SMARTFLO.BASE_URL}/v1/contact/${config.SMARTFLO.CONTACT_GROUP_ID}`;
 
-  console.log(`[Smartflo] Creating contact: ${phoneNumber} (${contactName})`);
+  console.log(`${LOG_PREFIX} Creating contact: ${phoneNumber} (${contactName}) source=${source}`);
 
   try {
     const response = await axios.post(
       url,
-      {
-        field_0: phoneNumber,
-        field_1: contactName
-      },
+      { field_0: phoneNumber, field_1: contactName },
       {
         headers: {
-          accept:         'application/json',
-          Authorization:  config.SMARTFLO.API_KEY,
+          'accept': 'application/json',
+          'Authorization': config.SMARTFLO.API_KEY,
           'content-type': 'application/json'
         },
-        timeout: 10000
+        timeout: config.TIMEOUTS.SMARTFLO
       }
     );
 
-    console.log(`[Smartflo] Contact created: ${phoneNumber}`, response.data);
+    console.log(`${LOG_PREFIX} Contact created: ${phoneNumber}`);
     return response.data;
 
   } catch (err) {
     const status = err.response?.status;
-    const detail = err.response?.data
-      ? JSON.stringify(err.response.data)
-      : err.message;
 
     if (status === 409) {
-      console.log(`[Smartflo] Contact ${phoneNumber} already exists (409)`);
+      console.log(`${LOG_PREFIX} Contact already exists: ${phoneNumber}`);
       return { alreadyExists: true };
     }
 
-    throw new Error(`[Smartflo] createContact failed (${status ?? 'network'}): ${detail}`);
+    const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+    console.error(`${LOG_PREFIX} createContact failed (${status || 'network'}): ${detail}`);
+    throw new ExternalServiceError(detail, 'Smartflo', { phoneNumber, status });
   }
 }
 
-module.exports = { createContact };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+module.exports = {
+  createContact
+};
