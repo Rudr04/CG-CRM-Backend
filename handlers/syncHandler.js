@@ -94,11 +94,15 @@ async function processEdit(edit, editor) {
   if (!existing) {
     console.log(`${LOG_PREFIX} Creating lead: ${phoneNorm}`);
     
+    const rowData = edit.rowData || {};
+    
     const createResult = await FirestoreService.createLead({
       phone,
-      name: '',
-      status: field === 'status' ? newValue : config.DEFAULTS.STATUS,
-      team: field === 'team' ? newValue : config.STAGES.NOT_ASSIGNED,
+      name: rowData.name || '',
+      status: rowData.status || config.DEFAULTS.STATUS,
+      team: rowData.team || config.STAGES.NOT_ASSIGNED,
+      location: rowData.location || '',
+      product: rowData.product || '',
       source: 'sheet_backfill',
       channel: 'sheet_sync',
       sheetRow: row

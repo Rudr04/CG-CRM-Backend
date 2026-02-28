@@ -24,7 +24,8 @@ console.log('CosmoGuru Webhook Starting...', {
   hasSpreadsheetId: !!process.env.SPREADSHEET_ID,
   hasWatiConfig: !!(process.env.WATI_TENANT_ID && process.env.WATI_BEARER_TOKEN),
   hasFirebaseUrl: !!process.env.FIREBASE_DATABASE_URL,
-  firestoreEnabled: config.FIRESTORE.ENABLED
+  firestoreEnabled: config.FIRESTORE.ENABLED,
+  firestorePhase: config.FIRESTORE.PHASE
 });
 
 

@@ -1,6 +1,7 @@
 // ============================================================================
 //  services/firestoreService.js — Firestore CRM Database
 //
+//  Phase 2: Firestore-first (Firestore is source of truth, Sheets gets async backup)
 //  Lead storage with history tracking. Uses centralized helpers.
 // ============================================================================
 

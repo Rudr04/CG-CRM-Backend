@@ -91,7 +91,8 @@ module.exports = {
   // ─── Firestore (CRM Database) ─────────────────────────────────────────────
   FIRESTORE: {
     COLLECTION: 'leads',
-    ENABLED: process.env.FIRESTORE_ENABLED !== 'false'
+    ENABLED: process.env.FIRESTORE_ENABLED !== 'false',
+    PHASE: parseInt(process.env.FIRESTORE_PHASE || '2', 10)  // 1 = Sheet-first (parallel), 2 = Firestore-first
   },
 
   // ─── Smartflo (Calling) ───────────────────────────────────────────────────
@@ -169,7 +170,6 @@ module.exports = {
 
   // ─── Defaults ─────────────────────────────────────────────────────────────
   DEFAULTS: {
-    PRODUCT: 'CGI',
     STATUS: 'Lead',
     TEAM: 'Not Assigned',
   }
