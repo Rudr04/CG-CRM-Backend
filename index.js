@@ -12,6 +12,7 @@ const { Datastore } = require('@google-cloud/datastore');
 const config = require('./config');
 const { routeEvent, shouldSkipDuplicate } = require('./lib/router');
 const { errorToResponse } = require('./lib/errorHandler');
+const PendingQueue = require('./services/pendingQueue');
 
 const datastore = new Datastore();
 
@@ -140,5 +141,24 @@ functions.http('webhook', async (req, res) => {
     console.error('Webhook error:', error);
     const { statusCode, body } = errorToResponse(error);
     return res.status(statusCode).json(body);
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  DIAGNOSTIC ENDPOINT — Queue Status
+// ═══════════════════════════════════════════════════════════════════════════
+
+functions.http('diagnostic', async (req, res) => {
+  try {
+    const queueStats = PendingQueue.getStats();
+    return res.status(200).json({
+      status: 'running',
+      pendingQueue: queueStats,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Diagnostic error:', error);
+    return res.status(500).json({ error: error.message });
   }
 });

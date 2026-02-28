@@ -1,32 +1,16 @@
 // ============================================================================
-//  services/sheetsService.js — Google Sheets CRUD
+//  sheetsService.js — Pure Google Sheets I/O
 //
-//  Phase 2: Firestore-first (primary writes to Firestore, async backup to Sheet)
-//  All Sheet operations. Uses centralized helpers.
+//  This service ONLY talks to the Google Sheets API.
+//  It has ZERO imports from firestoreService or any other data store.
+//  All orchestration (deciding what to write where) lives in handlers.
 // ============================================================================
 
 const { google } = require('googleapis');
 const config = require('../config');
-const { 
-  formatDate, 
-  formatTimeIST,
-  formatTimeShortIST,
-  getLastTenDigits, 
-  phoneNumbersMatch,
-  detectSource,
-  cleanString,
-  buildAttendanceString
-} = require('../utils/helpers');
-const FirestoreService = require('./firestoreService');
-
-const LOG_PREFIX = '[Sheets]';
+const { formatDate, getLastTenDigits, phoneNumbersMatch } = require('../utils/helpers');
 
 let sheets;
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  INITIALIZATION
-// ═══════════════════════════════════════════════════════════════════════════
 
 async function getSheets() {
   if (!sheets) {
@@ -34,497 +18,221 @@ async function getSheets() {
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     sheets = google.sheets({ version: 'v4', auth });
-    console.log(`${LOG_PREFIX} API initialized`);
+    console.log('Google Sheets API initialized');
   }
   return sheets;
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  FIRE-AND-FORGET HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-
-function fireAndForgetFirestore(fn) {
-  if (!config.FIRESTORE.ENABLED) return;
-  fn().catch(err => console.error(`${LOG_PREFIX} [Firestore async] ${err.message}`));
-}
-
-function fireAndForgetSheet(fn) {
-  fn().catch(err => console.error(`${LOG_PREFIX} [Sheet async] ${err.message}`));
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  FIND USER
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ─────────────────────────────────────────────────────────────
-//  Convert Firestore doc to Sheet-row-shaped array
-//  Callers like insertNewContact read data[config.SHEET_COLUMNS.MESSAGE] etc.
-//  This bridges the gap so existing code doesn't break.
-// ─────────────────────────────────────────────────────────────
-function _firestoreToSheetRow(d) {
-  const row = Array(27).fill('');
-  row[config.SHEET_COLUMNS.NAME]     = d.name || '';
-  row[config.SHEET_COLUMNS.NUMBER]   = d.phone || d.phone10 || '';
-  row[config.SHEET_COLUMNS.LOCATION] = d.location || '';
-  row[config.SHEET_COLUMNS.PRODUCT]  = d.product || '';
-  row[config.SHEET_COLUMNS.MESSAGE]  = d.message || '';
-  row[config.SHEET_COLUMNS.SOURCE]   = d.source || '';
-  row[config.SHEET_COLUMNS.TEAM]     = d.agent || d.team || '';
-  row[config.SHEET_COLUMNS.STATUS]   = d.status || '';
-  row[config.SHEET_COLUMNS.RATING]   = d.rating || '';
-  row[config.SHEET_COLUMNS.REMARK]   = d.remark || '';
-  row[config.SHEET_COLUMNS.TEAM_2]   = d.team2 || '';
-  row[config.SHEET_COLUMNS.STATUS_2] = d.status2 || '';
-  row[config.SHEET_COLUMNS.REMARK_2] = d.remark2 || '';
-  return row;
-}
-
-async function findUserByPhoneNumber(phoneNumber) {
-  // Phase 2: Firestore lookup first (single doc read vs full Sheet scan)
-  if (config.FIRESTORE.ENABLED && config.FIRESTORE.PHASE >= 2) {
-    try {
-      const firestoreLead = await FirestoreService.findLeadByPhone(phoneNumber);
-      if (firestoreLead) {
-        console.log(`${LOG_PREFIX} [Phase2] Duplicate found in Firestore: ${firestoreLead.docId}`);
-        // Return shape compatible with all callers: { row, data }
-        const d = firestoreLead.data;
-        return {
-          row: d.sheetRow || null,
-          data: _firestoreToSheetRow(d),
-          source: 'firestore'
-        };
-      }
-      // Not in Firestore — fall through to Sheet scan as safety net
-      console.log(`${LOG_PREFIX} [Phase2] Not in Firestore, falling back to Sheet scan for ${getLastTenDigits(phoneNumber)}`);
-    } catch (err) {
-      console.error(`${LOG_PREFIX} [Phase2] Firestore lookup failed, falling back to Sheet: ${err.message}`);
-    }
-  }
-
-  // Phase 1 fallback / Phase 2 safety net: full Sheet scan
-  const api = await getSheets();
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${config.SHEETS.DSR}!A2:AA`
-  });
-
-  const rows = response.data.values || [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const registeredNum = row[config.SHEET_COLUMNS.NUMBER] || '';
-    const otherNum = row[config.SHEET_COLUMNS.REGI_NO] || '';
-
-    if (phoneNumbersMatch(phoneNumber, registeredNum) || phoneNumbersMatch(phoneNumber, otherNum)) {
-      return { row: i + 2, data: row, source: 'sheet' };
-    }
-  }
-  return null;
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  INSERT CONTACT (webhook)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ─────────────────────────────────────────────────────────────
-//  Shared helper: append a new lead row to Sheet5
-//  Returns the row number, or throws on failure
-// ─────────────────────────────────────────────────────────────
-async function _appendToSheet(api, sheetName, data) {
-  const { senderName, waId, location, source, messageText, remark, team } = data;
-
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
-  const rows = response.data.values || [];
-  const nextRow = rows.length + 2;
-
-  const now = new Date();
-  const date = formatDate(now);
-  const options = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-  const timeOnly = new Intl.DateTimeFormat('en-IN', options).format(now);
-
-  const rowData = Array(27).fill('');
-  rowData[config.SHEET_COLUMNS.CGILN]     = '=ROW()-1+230000';
-  rowData[config.SHEET_COLUMNS.DATE]      = date;
-  rowData[config.SHEET_COLUMNS.TIME]      = timeOnly;
-  rowData[config.SHEET_COLUMNS.NAME]      = senderName;
-  rowData[config.SHEET_COLUMNS.NUMBER]    = waId;
-  rowData[config.SHEET_COLUMNS.LOCATION]  = location;
-  rowData[config.SHEET_COLUMNS.PRODUCT]   = 'CGI';
-  rowData[config.SHEET_COLUMNS.MESSAGE]   = messageText || '';
-  rowData[config.SHEET_COLUMNS.SOURCE]    = source;
-  rowData[config.SHEET_COLUMNS.TEAM]      = team;
-  rowData[config.SHEET_COLUMNS.STATUS]    = 'Lead';
-  rowData[config.SHEET_COLUMNS.DAY]       = `=IFERROR(WEEKDAY($B${nextRow},2)&TEXT($B${nextRow},"dddd"), "")`;
-  rowData[config.SHEET_COLUMNS.HOURS]     = `=IFERROR(HOUR($C${nextRow}), "")`;
-  rowData[config.SHEET_COLUMNS.CONVERTED] = `=SWITCH(L${nextRow},"Admission Done",1,"Seat Booked",1,0)`;
-  if (remark) rowData[config.SHEET_COLUMNS.REMARK] = remark;
-
-  await api.spreadsheets.values.append({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A:Z`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [rowData] }
-  });
-
-  console.log(`${LOG_PREFIX} [Sheet] New contact appended at row ${nextRow}`);
-  return nextRow;
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Shared helper: append a new lead row to Sheet5 (manual entry)
-//  Slightly different column layout for manual entries
-// ─────────────────────────────────────────────────────────────
-async function _appendToSheetManual(api, sheetName, data) {
-  const { senderName, waId, location, product, source, team, remark } = data;
-
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
-  const rows = response.data.values || [];
-  const nextRow = rows.length + 2;
-
-  const now = new Date();
-  const date = formatDate(now);
-  const options = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-  const timeOnly = new Intl.DateTimeFormat('en-IN', options).format(now);
-
-  const rowData = [
-    '=ROW()-1+230000',  // CGILN (0)
-    date,               // DATE (1)
-    timeOnly,           // TIME (2)
-    senderName,         // NAME (3)
-    waId,               // NUMBER (4)
-    '',                 // REGI_NO (5)
-    location,           // LOCATION (6)
-    product,            // PRODUCT (7)
-    '',                 // MESSAGE (8)
-    source,             // SOURCE (9)
-    team,               // TEAM (10)
-    'Lead',             // STATUS (11)
-    '',                 // RATING (12)
-    '',                 // CB Date (13)
-    remark,             // REMARK (14)
-    '',                 // TEAM_2 (15)
-    '',                 // STATUS_2 (16)
-    '',                 // REMARK_2 (17)
-    '',                 // CONF_CB_PRIORITY (18)
-    '',                 // CONFIRMATION (19)
-    '',                 // JOIN_POLL (20)
-    '',                 // NO_WITHOUT_91 (21)
-    `=IFERROR(WEEKDAY($B${nextRow},2)&TEXT($B${nextRow},"dddd"), "")`,  // DAY (22)
-    `=IFERROR(HOUR($C${nextRow}), "")`,                                  // HOURS (23)
-    `=SWITCH(L${nextRow},"Admission Done",1,"Seat Booked",1,0)`,        // CONVERTED (24)
-    '',                 // ATTENDANCE (25)
-    ''                  // INTERACTION (26)
-  ];
-
-  await api.spreadsheets.values.append({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A:Z`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [rowData] }
-  });
-
-  console.log(`${LOG_PREFIX} [Sheet] Manual inquiry appended at row ${nextRow}`);
-  return nextRow;
-}
-
-async function insertNewContact(params) {
+// ═════════════════════════════════════════════════════════════
+//  UPSERT CONTACT — unified create-or-update in Sheet5
+//
+//  If phone already exists in Sheet → updates specific cells
+//  If phone is new → appends a new row
+//
+//  IDEMPOTENT: safe to call multiple times for the same phone.
+//  This is critical for the retry queue — retries won't create
+//  duplicate rows.
+//
+//  @param {Object} leadData - { phone, name, location, product,
+//         source, team, message, remark, status, ... }
+//  @returns {{ row: number, action: 'created'|'updated' }}
+// ═════════════════════════════════════════════════════════════
+async function upsertContact(leadData) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
+  const phone = leadData.phone || leadData.waId || '';
 
-  const senderName = cleanString(params.senderName);
-  const waId = cleanString(params.waId);
-  const sourceUrl = params.sourceUrl || '';
-  const remark = cleanString(params.remark);
-  const messageText = cleanString(params.text || params.msg);
-  const team = params.team || config.DEFAULTS.TEAM;
-  const source = params.source || detectSource(sourceUrl);
-  const location = cleanString(params.location);
+  if (!phone) throw new Error('upsertContact: phone is required');
 
-  const existingContact = await findUserByPhoneNumber(waId);
+  // Check if row already exists
+  const existing = await findByPhone(phone);
 
-  if (existingContact) {
-    console.log(`${LOG_PREFIX} Contact ${waId} exists at row ${existingContact.row}`);
-
-    if (config.FIRESTORE.ENABLED && config.FIRESTORE.PHASE >= 2) {
-      // Phase 2: Firestore-first update
-      try {
-        await FirestoreService.createOrUpdateLead({
-          phone: waId,
-          name: senderName,
-          message: messageText,
-          remark: remark,
-          source: source,
-          location: location
-        }, {
-          action: 'contact_updated',
-          by: 'system',
-          details: { source, trigger: 'duplicate_webhook' }
-        });
-        console.log(`${LOG_PREFIX} [Phase2] Existing lead updated in Firestore: ${waId}`);
-
-        // Sheet update is async backup (only if we have a valid row number)
-        if (existingContact.row) {
-          fireAndForgetSheet(async () => {
-            const sheetApi = await getSheets();
-            const updates = [];
-            if (messageText) {
-              const currentMsg = existingContact.data[config.SHEET_COLUMNS.MESSAGE] || '';
-              const newMsg = currentMsg ? `${currentMsg} | ${messageText}` : messageText;
-              updates.push({ range: `${sheetName}!I${existingContact.row}`, values: [[newMsg]] });
-            }
-            if (remark) {
-              const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
-              const newRemark = currentRemark ? `${currentRemark} | ${remark}` : remark;
-              updates.push({ range: `${sheetName}!O${existingContact.row}`, values: [[newRemark]] });
-            }
-            if (updates.length > 0) {
-              await sheetApi.spreadsheets.values.batchUpdate({
-                spreadsheetId: config.SPREADSHEET_ID,
-                requestBody: { valueInputOption: 'RAW', data: updates }
-              });
-            }
-          });
-        }
-
-        return { message: 'Existing contact updated (Firestore-first)', row: existingContact.row };
-      } catch (err) {
-        console.error(`${LOG_PREFIX} [Phase2] Firestore update failed, falling back to Sheet: ${err.message}`);
-        // Fall through to Phase 1 below
-      }
-    }
-
-    // Phase 1 fallback
+  if (existing) {
+    // ── Update existing row ──
     const updates = [];
-    if (messageText) {
-      const currentMsg = existingContact.data[config.SHEET_COLUMNS.MESSAGE] || '';
-      const newMsg = currentMsg ? `${currentMsg} | ${messageText}` : messageText;
-      updates.push({ range: `${sheetName}!I${existingContact.row}`, values: [[newMsg]] });
+    const C = config.SHEET_COLUMNS;
+
+    if (leadData.message) {
+      const current = existing.data[C.MESSAGE] || '';
+      const merged = current ? `${current} | ${leadData.message}` : leadData.message;
+      updates.push({ range: `${sheetName}!I${existing.row}`, values: [[merged]] });
     }
-    if (remark) {
-      const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
-      const newRemark = currentRemark ? `${currentRemark} | ${remark}` : remark;
-      updates.push({ range: `${sheetName}!O${existingContact.row}`, values: [[newRemark]] });
+    if (leadData.remark) {
+      const current = existing.data[C.REMARK] || '';
+      const merged = current ? `${current} | ${leadData.remark}` : leadData.remark;
+      updates.push({ range: `${sheetName}!O${existing.row}`, values: [[merged]] });
     }
+    // Fill in blanks (don't overwrite existing values)
+    if (leadData.name && !existing.data[C.NAME]) {
+      updates.push({ range: `${sheetName}!D${existing.row}`, values: [[leadData.name]] });
+    }
+    if (leadData.location && !existing.data[C.LOCATION]) {
+      updates.push({ range: `${sheetName}!G${existing.row}`, values: [[leadData.location]] });
+    }
+    if (leadData.source && !existing.data[C.SOURCE]) {
+      updates.push({ range: `${sheetName}!J${existing.row}`, values: [[leadData.source]] });
+    }
+
     if (updates.length > 0) {
       await api.spreadsheets.values.batchUpdate({
         spreadsheetId: config.SPREADSHEET_ID,
         requestBody: { valueInputOption: 'RAW', data: updates }
       });
+      console.log(`[Sheet] Updated row ${existing.row} for ${getLastTenDigits(phone)}`);
     }
 
-    fireAndForgetFirestore(() => FirestoreService.createOrUpdateLead({
-      phone: waId, name: senderName, message: messageText, remark, source, location
-    }, { action: 'contact_updated', by: 'system', details: { source, trigger: 'duplicate_webhook' } }));
+    return { row: existing.row, action: 'updated' };
 
-    return { message: 'Existing contact updated', row: existingContact.row };
+  } else {
+    // ── Append new row ──
+    const response = await api.spreadsheets.values.get({
+      spreadsheetId: config.SPREADSHEET_ID,
+      range: `${sheetName}!A2:A`
+    });
+    const rows = response.data.values || [];
+    const nextRow = rows.length + 2;
+
+    const now = new Date();
+    const date = formatDate(now);
+    const opts = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const time = new Intl.DateTimeFormat('en-IN', opts).format(now);
+
+    const name     = leadData.name || leadData.senderName || '';
+    const location = leadData.location || '';
+    const product  = leadData.product || 'CGI';
+    const source   = leadData.source || '';
+    const team     = leadData.team || leadData.agent || 'Not Assigned';
+    const message  = leadData.message || '';
+    const remark   = leadData.remark || '';
+    const status   = leadData.status || 'Lead';
+
+    const rowData = [
+      '=ROW()-1+230000',                                                     // A: CGILN
+      date,                                                                  // B: DATE
+      time,                                                                  // C: TIME
+      name,                                                                  // D: NAME
+      phone,                                                                 // E: NUMBER
+      '',                                                                    // F: REGI_NO
+      location,                                                              // G: LOCATION
+      product,                                                               // H: PRODUCT
+      message,                                                               // I: MESSAGE
+      source,                                                                // J: SOURCE
+      team,                                                                  // K: TEAM
+      status,                                                                // L: STATUS
+      '',                                                                    // M: RATING
+      '',                                                                    // N: ACTION/CB_DATE
+      remark,                                                                // O: REMARK
+      '',                                                                    // P: TEAM_2
+      '',                                                                    // Q: STATUS_2
+      '',                                                                    // R: REMARK_2
+      '',                                                                    // S: CONF_CB_PRIORITY
+      '',                                                                    // T: CONFIRMATION
+      '',                                                                    // U: JOIN_POLL
+      '',                                                                    // V: NO_WITHOUT_91
+      `=IFERROR(WEEKDAY($B${nextRow},2)&TEXT($B${nextRow},"dddd"), "")`,     // W: DAY
+      `=IFERROR(HOUR($C${nextRow}), "")`,                                    // X: HOURS
+      `=SWITCH(L${nextRow},"Admission Done",1,"Seat Booked",1,0)`,           // Y: CONVERTED
+      '',                                                                    // Z: ATTENDANCE
+      ''                                                                     // AA: INTERACTION
+    ];
+
+    await api.spreadsheets.values.append({
+      spreadsheetId: config.SPREADSHEET_ID,
+      range: `${sheetName}!A:Z`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowData] }
+    });
+
+    console.log(`[Sheet] Appended row ${nextRow} for ${getLastTenDigits(phone)}`);
+    return { row: nextRow, action: 'created' };
   }
-
-  // ── New contact ──
-  if (config.FIRESTORE.ENABLED && config.FIRESTORE.PHASE >= 2) {
-    // ── PHASE 2: Firestore-first ──
-    try {
-      const firestoreResult = await FirestoreService.createLead({
-        phone: waId,
-        name: senderName,
-        location: location,
-        product: 'CGI',
-        source: source,
-        message: messageText,
-        remark: remark,
-        team: team,
-        status: 'Lead',
-        channel: 'webhook'
-      });
-      console.log(`${LOG_PREFIX} [Phase2] Lead created in Firestore: ${firestoreResult?.cgId || waId}`);
-
-      // Sheet write is now async/non-blocking backup
-      fireAndForgetSheet(async () => {
-        const sheetRow = await _appendToSheet(api, sheetName, {
-          senderName, waId, location, source, messageText, remark, team
-        });
-        // Update Firestore with the sheetRow reference
-        if (sheetRow && firestoreResult?.docId) {
-          FirestoreService.updateLead(waId, { sheetRow }, null)
-            .catch(err => console.error(`${LOG_PREFIX} [Phase2] sheetRow update failed: ${err.message}`));
-        }
-      });
-
-      return { message: 'New contact created (Firestore-first)', row: null };
-
-    } catch (firestoreErr) {
-      // Firestore failed — fall back to Phase 1 (Sheet-first)
-      console.error(`${LOG_PREFIX} [Phase2] Firestore create failed, falling back to Sheet: ${firestoreErr.message}`);
-      // Fall through to Phase 1 path below
-    }
-  }
-
-  // ── PHASE 1 FALLBACK: Sheet-first (also used when PHASE < 2) ──
-  const sheetRow = await _appendToSheet(api, sheetName, {
-    senderName, waId, location, source, messageText, remark, team
-  });
-
-  fireAndForgetFirestore(() => FirestoreService.createLead({
-    phone: waId, name: senderName, location, product: 'CGI',
-    source, message: messageText, remark, team, status: 'Lead',
-    sheetRow: sheetRow, channel: 'webhook'
-  }));
-
-  return { message: 'New contact created', row: sheetRow };
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  INSERT CONTACT MANUAL
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+//  UPDATE CONTACT CELLS — targeted update on a known row
+//
+//  Use when you already know the row number and want to update
+//  specific fields. For example: community join sets status on
+//  a known row, form submission updates name + regiNo + status.
+//
+//  @param {number} row   - Sheet row number
+//  @param {Object} fields - { status: 'X', team: 'Y', ... }
+// ═════════════════════════════════════════════════════════════
+async function updateContactCells(row, fields) {
+  if (!row) throw new Error('updateContactCells: row is required');
 
-async function insertNewContactManual(params) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
-  const senderName = cleanString(params.senderName);
-  const waId = cleanString(params.waId);
-  const location = cleanString(params.location);
-  const product = params.product || config.DEFAULTS.PRODUCT;
-  const source = params.source || 'Manual Entry';
-  const team = params.team || config.DEFAULTS.TEAM;
-  const remark = cleanString(params.remark);
+  // Map field names to Sheet column letters
+  const FIELD_TO_COL = {
+    name:      'D',
+    regiNo:    'F',
+    location:  'G',
+    product:   'H',
+    message:   'I',
+    source:    'J',
+    team:      'K',
+    status:    'L',
+    rating:    'M',
+    remark:    'O',
+    team_2:    'P',
+    status_2:  'Q',
+    remark_2:  'R',
+  };
 
-  const existingContact = await findUserByPhoneNumber(waId);
-  if (existingContact) {
-    console.log(`${LOG_PREFIX} Contact ${waId} exists at row ${existingContact.row}`);
-
-    if (config.FIRESTORE.ENABLED && config.FIRESTORE.PHASE >= 2) {
-      // Phase 2: Firestore-first update
-      try {
-        await FirestoreService.createOrUpdateLead({
-          phone: waId,
-          name: senderName,
-          remark: remark,
-          source: source,
-          location: location
-        }, {
-          action: 'contact_updated',
-          by: 'system',
-          details: { source, trigger: 'manual_duplicate' }
-        });
-        console.log(`${LOG_PREFIX} [Phase2] Existing lead updated in Firestore: ${waId}`);
-
-        // Sheet update is now async backup
-        fireAndForgetSheet(async () => {
-          const sheetApi = await getSheets();
-          const updates = [];
-          if (remark) {
-            const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
-            const newRemark = currentRemark ? `${currentRemark} | ${remark}` : remark;
-            updates.push({ range: `${sheetName}!O${existingContact.row}`, values: [[newRemark]] });
-          }
-          if (updates.length > 0) {
-            await sheetApi.spreadsheets.values.batchUpdate({
-              spreadsheetId: config.SPREADSHEET_ID,
-              requestBody: { valueInputOption: 'RAW', data: updates }
-            });
-          }
-        });
-
-        return { message: 'Existing contact updated (Firestore-first)', row: existingContact.row };
-      } catch (err) {
-        console.error(`${LOG_PREFIX} [Phase2] Firestore update failed, falling back to Sheet: ${err.message}`);
-        // Fall through to Phase 1 below
-      }
-    }
-
-    // Phase 1 fallback
-    if (remark) {
-      const currentRemark = existingContact.data[config.SHEET_COLUMNS.REMARK] || '';
-      await api.spreadsheets.values.update({
-        spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!O${existingContact.row}`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [[currentRemark ? `${currentRemark} | ${remark}` : remark]] }
-      });
-    }
-
-    fireAndForgetFirestore(() => FirestoreService.createOrUpdateLead({
-      phone: waId, name: senderName, remark, source, location
-    }, { action: 'contact_updated', by: 'system', details: { source, trigger: 'manual_duplicate' } }));
-
-    return { message: 'Existing contact updated', row: existingContact.row };
-  }
-
-  // ── New contact ──
-  if (config.FIRESTORE.ENABLED && config.FIRESTORE.PHASE >= 2) {
-    try {
-      const firestoreResult = await FirestoreService.createLead({
-        phone: waId,
-        name: senderName,
-        location: location,
-        product: product,
-        source: source,
-        remark: remark,
-        team: team,
-        status: 'Lead',
-        channel: 'manual_entry'
-      });
-      console.log(`${LOG_PREFIX} [Phase2] Manual lead created in Firestore: ${firestoreResult?.cgId || waId}`);
-
-      fireAndForgetSheet(async () => {
-        const sheetRow = await _appendToSheetManual(api, sheetName, {
-          senderName, waId, location, product, source, team, remark
-        });
-        if (sheetRow && firestoreResult?.docId) {
-          FirestoreService.updateLead(waId, { sheetRow }, null)
-            .catch(err => console.error(`${LOG_PREFIX} [Phase2] sheetRow update failed: ${err.message}`));
-        }
-      });
-
-      return { message: 'Manual inquiry created (Firestore-first)', row: null };
-    } catch (firestoreErr) {
-      console.error(`${LOG_PREFIX} [Phase2] Firestore create failed, falling back to Sheet: ${firestoreErr.message}`);
+  const updates = [];
+  for (const [field, value] of Object.entries(fields)) {
+    const col = FIELD_TO_COL[field];
+    if (col && value !== undefined) {
+      updates.push({ range: `${sheetName}!${col}${row}`, values: [[value]] });
     }
   }
 
-  // Phase 1 fallback
-  const sheetRow = await _appendToSheetManual(api, sheetName, {
-    senderName, waId, location, product, source, team, remark
-  });
-
-  fireAndForgetFirestore(() => FirestoreService.createLead({
-    phone: waId, name: senderName, location, product, source, remark,
-    team, status: 'Lead', sheetRow, channel: 'manual_entry'
-  }));
-
-  return { message: 'Manual inquiry created', row: sheetRow };
+  if (updates.length > 0) {
+    await api.spreadsheets.values.batchUpdate({
+      spreadsheetId: config.SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data: updates }
+    });
+    console.log(`[Sheet] Updated ${updates.length} cell(s) on row ${row}`);
+  }
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  FORM DATA & WHITELIST
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ═════════════════════════════════════════════════════════════
+//  UPDATE FORM DATA — WhatsApp flow form submission
+//  Sets name, regiNo (form_num), and status on the matching row.
+//  NO Firestore calls — handler does that separately.
+// ═════════════════════════════════════════════════════════════
 async function updateFormData(params) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
-  const waId = params.wa_num || '';
-  const name = params.name || '';
+  const waId    = params.wa_num || '';
+  const option  = params.option || '';
   const formNum = params.form_num || '';
-  const option = params.option || '';
+  const name    = params.name || '';
 
-  const userMatch = await findUserByPhoneNumber(waId);
-  if (!userMatch) throw new Error('No match found');
+  if (!waId) throw new Error('wa_num is missing');
 
-  const targetRow = userMatch.row;
-  const isOnline = option.toLowerCase().includes('online');
-  const statusValue = isOnline ? "Online MC Link Sent" : "Ahm MC Link Sent";
+  const response = await api.spreadsheets.values.get({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!A2:Z`
+  });
+
+  const rows = response.data.values || [];
+  const matchingRowIndex = rows.findIndex(row =>
+    row[config.SHEET_COLUMNS.NUMBER]?.toString() === waId.toString()
+  );
+
+  if (matchingRowIndex === -1) throw new Error('No match found');
+
+  const targetRow = matchingRowIndex + 2;
+  const statusValue = option === "Offline (અમદાવાદ ક્લાસ માં)"
+    ? "Ahm MC Link Sent"
+    : "Online MC Link Sent";
 
   await api.spreadsheets.values.batchUpdate({
     spreadsheetId: config.SPREADSHEET_ID,
@@ -538,15 +246,44 @@ async function updateFormData(params) {
     }
   });
 
-  console.log(`${LOG_PREFIX} Form data updated row=${targetRow}`);
-
-  fireAndForgetFirestore(() => FirestoreService.updateLead(waId, {
-    name, regiNo: formNum, status: statusValue
-  }, { action: 'form_submitted', by: 'system', details: { formNum, option, statusValue } }));
-
-  return true;
+  console.log(`[Sheet] Form data updated row ${targetRow}: name=${name}, regiNo=${formNum}, status=${statusValue}`);
+  return { row: targetRow, statusValue };
 }
 
+
+// ═════════════════════════════════════════════════════════════
+//  FIND BY PHONE — Sheet-only phone scan
+//  Scans Sheet5 for a matching phone number.
+//  NO Firestore lookup — handler does that separately.
+//
+//  @returns {{ row: number, data: string[] }} or null
+// ═════════════════════════════════════════════════════════════
+async function findByPhone(phoneNumber) {
+  const api = await getSheets();
+  const sheetName = config.SHEETS.DSR;
+
+  const response = await api.spreadsheets.values.get({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!A2:Z`
+  });
+
+  const rows = response.data.values || [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const registeredNum = row[config.SHEET_COLUMNS.NUMBER] || '';
+    if (phoneNumbersMatch(phoneNumber, registeredNum)) {
+      return { row: i + 2, data: row };
+    }
+  }
+
+  return null;
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  CHECK FIREBASE WHITELIST (unchanged — different sheet)
+// ═════════════════════════════════════════════════════════════
 async function checkFirebaseWhitelist(phoneNumber) {
   const api = await getSheets();
   const sheetName = config.SHEETS.FIREBASE_WHITELIST;
@@ -563,98 +300,43 @@ async function checkFirebaseWhitelist(phoneNumber) {
     for (const row of rows) {
       const mainNumber = String(row[0] || '').trim();
       const regiNumber = String(row[1] || '').trim();
-      
+
       if (mainNumber && getLastTenDigits(mainNumber) === last10) {
-        console.log(`${LOG_PREFIX} Whitelist match: ${phoneNumber}`);
-        return regiNumber || mainNumber;
+        const registeredNumber = regiNumber || mainNumber;
+        console.log(`Whitelist match found for ${phoneNumber}, registered number: ${registeredNumber}`);
+        return registeredNumber;
       }
     }
 
-    console.log(`${LOG_PREFIX} No whitelist match: ${phoneNumber}`);
+    console.log(`No whitelist match for ${phoneNumber}`);
     return null;
   } catch (error) {
-    console.error(`${LOG_PREFIX} checkFirebaseWhitelist error: ${error.message}`);
+    console.error(`checkFirebaseWhitelist error: ${error.message}`);
     return null;
   }
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  COMMUNITY JOIN
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function handleCommunityJoin(params) {
-  const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
-  
-  const phoneNumber = params.wa_num || '';
-  if (!phoneNumber) throw new Error('Phone missing');
-
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
-
-  const rows = response.data.values || [];
-  const matchingRowIndex = rows.findIndex(row => 
-    phoneNumbersMatch(row[config.SHEET_COLUMNS.NUMBER] || '', phoneNumber)
-  );
-
-  if (matchingRowIndex === -1) return { message: 'Phone not found' };
-
-  const targetRow = matchingRowIndex + 2;
-  const currentStatus = rows[matchingRowIndex][config.SHEET_COLUMNS.STATUS] || '';
-  const currentTeam = rows[matchingRowIndex][config.SHEET_COLUMNS.TEAM] || '';
-
-  const isOnline = currentStatus.includes('Online');
-  const statusValue = isOnline ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
-
-  const updates = [{ range: `${sheetName}!L${targetRow}`, values: [[statusValue]] }];
-  if (currentTeam === config.DEFAULTS.TEAM) {
-    updates.push({ range: `${sheetName}!K${targetRow}`, values: [['ROBO']] });
-  }
-
-  await api.spreadsheets.values.batchUpdate({
-    spreadsheetId: config.SPREADSHEET_ID,
-    requestBody: { valueInputOption: 'RAW', data: updates }
-  });
-
-  console.log(`${LOG_PREFIX} Community join: ${phoneNumber}`);
-
-  const firestoreUpdates = { status: statusValue };
-  if (currentTeam === config.DEFAULTS.TEAM) {
-    firestoreUpdates.agent = 'ROBO';
-    firestoreUpdates.stage = 'ROBO';
-  }
-  fireAndForgetFirestore(() => FirestoreService.updateLead(phoneNumber, firestoreUpdates, {
-    action: 'community_joined', by: 'system', details: { statusValue, groupType: isOnline ? 'online' : 'ahmedabad' }
-  }));
-
-  return { message: 'Click tracked', row: targetRow };
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  ATTENDANCE
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ═════════════════════════════════════════════════════════════
+//  UPDATE ATTENDANCE (unchanged — different sheet)
+// ═════════════════════════════════════════════════════════════
 async function updateAttendance(phoneNumber, name, loginTimestamp) {
   const api = await getSheets();
   const sheetName = config.SHEETS.FIREBASE_WHITELIST;
 
   try {
-    const response = await api.spreadsheets.values.get({
+    const searchResponse = await api.spreadsheets.values.get({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!E2:L`
+      range: `${sheetName}!E2:F`
     });
 
-    const rows = response.data.values || [];
+    const searchRows = searchResponse.data.values || [];
     let foundRow = null;
-    let fullRowData = [];
+    let fullRowData = null;
 
-    for (let i = 0; i < rows.length; i++) {
-      const numberCol = rows[i][0] || '';
-      const regiCol = rows[i][1] || '';
+    for (let i = 0; i < searchRows.length; i++) {
+      const numberCol = searchRows[i][0] || '';
+      const regiCol   = searchRows[i][1] || '';
 
       if (phoneNumbersMatch(phoneNumber, numberCol) || phoneNumbersMatch(phoneNumber, regiCol)) {
         foundRow = i + 2;
@@ -668,11 +350,16 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
     }
 
     const loginDate = new Date(loginTimestamp);
-    const formattedTime = formatTimeShortIST(loginDate);
+    const formattedTime = loginDate.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit'
+    });
+
+    const buildAttendance = (current) =>
+      current ? `${current} | ${formattedTime}` : `Present ${formattedTime}`;
 
     if (foundRow) {
       const currentAttendance = fullRowData[11] || '';
-      const updatedAttendance = buildAttendanceString(currentAttendance, formattedTime);
+      const updatedAttendance = buildAttendance(currentAttendance);
 
       await api.spreadsheets.values.update({
         spreadsheetId: config.SPREADSHEET_ID,
@@ -681,63 +368,58 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
         requestBody: { values: [[updatedAttendance]] }
       });
 
-      console.log(`${LOG_PREFIX} Attendance updated: ${phoneNumber} row ${foundRow}`);
-
-      fireAndForgetFirestore(() => FirestoreService.addHistory(
-        phoneNumber, 'attendance_marked', 'system', { time: formattedTime, timestamp: loginTimestamp }
-      ));
-
       return {
         found: true, action: 'updated', row: foundRow,
         name: fullRowData[3] || name, attendance: updatedAttendance,
         message: 'Attendance marked as Present'
       };
+
+    } else {
+      const allRowsResponse = await api.spreadsheets.values.get({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `${sheetName}!A2:A`
+      });
+      const existingRows = allRowsResponse.data.values || [];
+      const nextRow = existingRows.length + 2;
+
+      const now = new Date();
+      const currentDate = formatDate(now);
+      const currentTime = now.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const attendanceValue = buildAttendance('');
+
+      const newRowData = [
+        '=ROW()-1', currentDate, currentTime, name,
+        phoneNumber, phoneNumber, '', 'CGI', '', '', '', attendanceValue
+      ];
+
+      await api.spreadsheets.values.append({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `${sheetName}!A:L`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [newRowData] }
+      });
+
+      return {
+        found: false, action: 'created', row: nextRow,
+        name, attendance: attendanceValue,
+        message: 'New entry created with attendance marked'
+      };
     }
 
-    // Create new entry
-    const allRowsResponse = await api.spreadsheets.values.get({
-      spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A2:A`
-    });
-    const existingRows = allRowsResponse.data.values || [];
-    const nextRow = existingRows.length + 2;
-    const now = new Date();
-    const attendanceValue = buildAttendanceString('', formattedTime);
-
-    await api.spreadsheets.values.append({
-      spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A:L`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[
-        '=ROW()-1', formatDate(now), formatTimeIST(now), name,
-        phoneNumber, phoneNumber, '', config.DEFAULTS.PRODUCT, '', '', '', attendanceValue
-      ]] }
-    });
-
-    console.log(`${LOG_PREFIX} New attendance entry: ${phoneNumber} row ${nextRow}`);
-
-    return {
-      found: false, action: 'created', row: nextRow,
-      name, attendance: attendanceValue,
-      message: 'New entry created with attendance marked'
-    };
   } catch (error) {
-    console.error(`${LOG_PREFIX} updateAttendance error: ${error.message}`);
+    console.error(`updateAttendance error: ${error.message}`);
     throw error;
   }
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  EXPORTS
-// ═══════════════════════════════════════════════════════════════════════════
-
 module.exports = {
-  insertNewContact,
-  insertNewContactManual,
-  findUserByPhoneNumber,
-  checkFirebaseWhitelist,
+  upsertContact,
+  updateContactCells,
   updateFormData,
-  handleCommunityJoin,
-  updateAttendance
+  findByPhone,
+  checkFirebaseWhitelist,
+  updateAttendance,
 };
