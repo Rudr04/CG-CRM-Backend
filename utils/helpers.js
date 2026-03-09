@@ -183,7 +183,7 @@ function containsFuzzyKeywords(messageText) {
     'online', 'offline', 'masterclass', 'register', 'address',
     'link', 'course', 'jyotish', 'vastu', 'hi', 'hello',
     'learn', 'vedic', 'astrology', 'hey', 'detail', 'info',
-    'more', 'cvpt', 'price', 'syllabus', 'fees'
+    'more', 'cvpt', 'price', 'syllabus', 'fees','#AyushGandoChe'
   ];
   
   const exactKeywords = [

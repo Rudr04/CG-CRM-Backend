@@ -172,5 +172,59 @@ module.exports = {
   DEFAULTS: {
     STATUS: 'Lead',
     TEAM: 'Not Assigned',
-  }
+    PRODUCT: 'CGI'
+  },
+
+  // ─── Multi-Spreadsheet Sync Targets (Phase 3) ────────────────────────────
+  // Each target maps stage(s) to a specific spreadsheet
+  SYNC_TARGETS: [
+    {
+      id: process.env.SHEET_AGENTS_ID || process.env.SPREADSHEET_ID,
+      name: 'Agents DSR',
+      sheet: 'DSR',
+      filter: (stage) => ['unclaimed', 'Not Assigned', 'agent_working'].includes(stage),
+      columns: 'FULL'
+    },
+    {
+      id: process.env.SHEET_SALES_ID || '',
+      name: 'Sales Review',
+      sheet: 'Review',
+      filter: (stage) => stage === 'sales_review',
+      columns: 'REVIEW'
+    },
+    {
+      id: process.env.SHEET_PAYMENTS_ID || '',
+      name: 'Payments',
+      sheet: 'Payments',
+      filter: (stage) => stage === 'payment_pending',
+      columns: 'PAYMENTS'
+    },
+    {
+      id: process.env.SHEET_DELIVERY_ID || '',
+      name: 'Delivery',
+      sheet: 'Delivery',
+      filter: (stage) => stage === 'delivery',
+      columns: 'DELIVERY'
+    },
+    {
+      id: process.env.SHEET_MASTER_ID || '',
+      name: 'Master',
+      sheet: 'All',
+      filter: () => true,
+      columns: 'MASTER'
+    },
+  ],
+
+  // ─── Allowed Stage Transitions (Phase 3) ─────────────────────────────────
+  // Map of: currentStage → [allowed next stages]
+  ALLOWED_TRANSITIONS: {
+    'unclaimed': ['agent_working', 'dead'],
+    'Not Assigned': ['agent_working', 'dead'],
+    'agent_working': ['sales_review', 'dead'],
+    'sales_review': ['payment_pending', 'agent_working', 'dead'],
+    'payment_pending': ['delivery', 'sales_review'],
+    'delivery': ['completed'],
+    'completed': [],
+    'dead': ['unclaimed'],
+  },
 };

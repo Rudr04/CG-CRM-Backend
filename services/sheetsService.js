@@ -73,7 +73,7 @@ async function upsertContact(leadData) {
     if (leadData.source && !existing.data[C.SOURCE]) {
       updates.push({ range: `${sheetName}!J${existing.row}`, values: [[leadData.source]] });
     }
-
+ 
     if (updates.length > 0) {
       await api.spreadsheets.values.batchUpdate({
         spreadsheetId: config.SPREADSHEET_ID,

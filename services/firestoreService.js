@@ -38,6 +38,24 @@ function getDb() {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  STAGE INFERENCE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function inferStage(team, status) {
+  if (!team || team === 'Not Assigned') return 'unclaimed';
+  if (team === 'ROBO') return 'agent_working';
+
+  const s = (status || '').toLowerCase();
+  if (s.includes('converted') || s.includes('admission') || s.includes('seat booked') || s.includes('fees')) {
+    return 'sales_review';
+  }
+  if (s === 'not interested') return 'dead';
+
+  return 'agent_working';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  COUNTRY CODE EXTRACTION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -117,22 +135,49 @@ async function findLeadByPhone(phone) {
   try {
     const firestore = getDb();
     const phoneNorm = normalizePhone(phone);
-    
+
     if (!phoneNorm || phoneNorm.length < 10) return null;
-    
+
     const snapshot = await firestore
       .collection(COLLECTION)
       .where('phoneNormalized', '==', phoneNorm)
       .limit(1)
       .get();
-    
+
     if (snapshot.empty) return null;
-    
+
     const doc = snapshot.docs[0];
     return { docId: doc.id, data: doc.data() };
   } catch (error) {
     console.error(`${LOG_PREFIX} findLeadByPhone error: ${error.message}`);
     return null;
+  }
+}
+
+async function getLeadsByUpdatedAt(sinceTimestamp) {
+  try {
+    const firestore = getDb();
+    const query = firestore.collection(COLLECTION)
+      .where('updatedAt', '>', sinceTimestamp)
+      .orderBy('updatedAt', 'asc')
+      .limit(500);
+
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error(`${LOG_PREFIX} getLeadsByUpdatedAt error: ${error.message}`);
+    return [];
+  }
+}
+
+async function getAllLeads() {
+  try {
+    const firestore = getDb();
+    const snapshot = await firestore.collection(COLLECTION).get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error(`${LOG_PREFIX} getAllLeads error: ${error.message}`);
+    return [];
   }
 }
 
@@ -171,7 +216,7 @@ async function createLead(leadData) {
       localNumber: countryInfo.localNumber,
       name: cleanString(leadData.name || leadData.senderName),
       email: cleanString(leadData.email),
-      stage: leadData.team || config.STAGES.NOT_ASSIGNED,
+      stage: leadData.stage || inferStage(leadData.team, leadData.status) || 'unclaimed',
       status: leadData.status || config.DEFAULTS.STATUS,
       agent: leadData.team || config.STAGES.NOT_ASSIGNED,
       location: cleanString(leadData.location),
@@ -308,11 +353,14 @@ async function storeSyncFailure(edit, error) {
 module.exports = {
   getDb,
   findLeadByPhone,
+  getLeadsByUpdatedAt,
+  getAllLeads,
   createLead,
   updateLead,
   addHistory,
   createOrUpdateLead,
   getNextCgId,
   extractCountryInfo,
+  inferStage,
   storeSyncFailure,
 };
