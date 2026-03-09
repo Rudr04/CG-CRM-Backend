@@ -154,6 +154,33 @@ async function findLeadByPhone(phone) {
   }
 }
 
+async function getLeadByPhone10(phone10) {
+  try {
+    const firestore = getDb();
+
+    if (!phone10 || phone10.length < 10) return null;
+
+    // Try direct doc read first (phone10 is used as doc ID in some cases)
+    const normalizedPhone10 = phone10.slice(-10);
+
+    // Search by phoneNormalized field that ends with phone10
+    const snapshot = await firestore
+      .collection(COLLECTION)
+      .where('phoneNormalized', '>=', normalizedPhone10)
+      .where('phoneNormalized', '<=', normalizedPhone10 + '\uf8ff')
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return null;
+
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
+  } catch (error) {
+    console.error(`${LOG_PREFIX} getLeadByPhone10 error: ${error.message}`);
+    return null;
+  }
+}
+
 async function getLeadsByUpdatedAt(sinceTimestamp) {
   try {
     const firestore = getDb();
@@ -353,6 +380,7 @@ async function storeSyncFailure(edit, error) {
 module.exports = {
   getDb,
   findLeadByPhone,
+  getLeadByPhone10,
   getLeadsByUpdatedAt,
   getAllLeads,
   createLead,

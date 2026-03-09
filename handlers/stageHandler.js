@@ -7,6 +7,7 @@
 
 const admin = require('firebase-admin');
 const FirestoreService = require('../services/firestoreService');
+const RoutingService = require('../services/sheetRoutingService');
 const config = require('../config');
 const { normalizePhone } = require('../utils/helpers');
 
@@ -41,6 +42,7 @@ async function claimLead(params) {
 
     const data = doc.data();
     const currentAgent = data.agent || 'Not Assigned';
+    const oldStage = data.stage || 'unclaimed';
 
     // Already claimed by someone else
     if (currentAgent !== 'Not Assigned' && currentAgent !== agentName) {
@@ -49,9 +51,11 @@ async function claimLead(params) {
 
     // Claim it
     const now = new Date().toISOString();
+    const newStage = config.STAGES.AGENT_WORKING;
+
     transaction.update(docRef, {
       agent: agentName,
-      stage: config.STAGES.AGENT_WORKING,
+      stage: newStage,
       updatedAt: now,
       history: admin.firestore.FieldValue.arrayUnion({
         action: 'claimed',
@@ -61,8 +65,21 @@ async function claimLead(params) {
       })
     });
 
-    return { claimed: true, agent: agentName };
+    return { claimed: true, agent: agentName, oldStage, newStage };
   });
+
+  // Step 2: Immediate sheet routing (non-blocking on failure)
+  if (result.claimed) {
+    try {
+      const lead = await FirestoreService.findLeadByPhone(phone);
+      if (lead) {
+        await RoutingService.routeLeadToSheets(lead.data, result.oldStage, result.newStage);
+      }
+    } catch (routeErr) {
+      // Log but don't fail — Firestore is correct, sheets can be fixed
+      console.error(`${LOG_PREFIX} Sheet routing failed after claim: ${routeErr.message}`);
+    }
+  }
 
   console.log(`${LOG_PREFIX} Lead claim result: ${JSON.stringify(result)}`);
   return result;
@@ -127,6 +144,18 @@ async function transitionStage(params) {
     return { transitioned: true, from: currentStage, to: targetStage };
   });
 
+  // Step 2: Immediate sheet routing
+  if (result.transitioned) {
+    try {
+      const lead = await FirestoreService.findLeadByPhone(phone);
+      if (lead) {
+        await RoutingService.routeLeadToSheets(lead.data, result.from, result.to);
+      }
+    } catch (routeErr) {
+      console.error(`${LOG_PREFIX} Sheet routing failed after transition: ${routeErr.message}`);
+    }
+  }
+
   console.log(`${LOG_PREFIX} Stage transition: ${result.from} → ${result.to}`);
   return result;
 }
@@ -159,13 +188,17 @@ async function confirmPayment(params) {
     if (!doc.exists) throw new Error('Lead not found');
 
     const data = doc.data();
-    if (data.stage !== 'payment_pending') {
-      throw new Error(`Lead is in stage "${data.stage}", not payment_pending`);
+    const oldStage = data.stage || '';
+
+    if (oldStage !== 'payment_pending') {
+      throw new Error(`Lead is in stage "${oldStage}", not payment_pending`);
     }
 
     const now = new Date().toISOString();
+    const newStage = config.STAGES.DELIVERY;
+
     transaction.update(docRef, {
-      stage: config.STAGES.DELIVERY,
+      stage: newStage,
       'payment.confirmed': true,
       'payment.amount': amount || null,
       'payment.method': method || '',
@@ -180,8 +213,20 @@ async function confirmPayment(params) {
       })
     });
 
-    return { confirmed: true, nextStage: 'delivery' };
+    return { confirmed: true, from: oldStage, to: newStage };
   });
+
+  // Immediate routing
+  if (result.confirmed) {
+    try {
+      const lead = await FirestoreService.findLeadByPhone(phone);
+      if (lead) {
+        await RoutingService.routeLeadToSheets(lead.data, result.from, result.to);
+      }
+    } catch (routeErr) {
+      console.error(`${LOG_PREFIX} Sheet routing failed after payment: ${routeErr.message}`);
+    }
+  }
 
   console.log(`${LOG_PREFIX} Payment confirmed for ${phoneNorm}`);
   return result;

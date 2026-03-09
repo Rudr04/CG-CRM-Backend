@@ -8,6 +8,7 @@
 
 const SheetService     = require('../services/sheetsService');
 const FirestoreService = require('../services/firestoreService');
+const RoutingService   = require('../services/sheetRoutingService');
 const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
@@ -26,8 +27,9 @@ function buildWriteBoth(leadData, historyEntry) {
   return async () => {
     const errors = [];
 
+    let firestoreResult;
     try {
-      await FirestoreService.createOrUpdateLead(leadData, historyEntry);
+      firestoreResult = await FirestoreService.createOrUpdateLead(leadData, historyEntry);
     } catch (e) {
       errors.push(`firestore: ${e.message}`);
     }
@@ -36,6 +38,17 @@ function buildWriteBoth(leadData, historyEntry) {
       await SheetService.upsertContact(leadData);
     } catch (e) {
       errors.push(`sheet: ${e.message}`);
+    }
+
+    // If this was a new lead creation (not an update), route it to appropriate sheets
+    if (firestoreResult && firestoreResult.created) {
+      try {
+        const stage = leadData.stage || FirestoreService.inferStage(leadData.team, leadData.status) || 'unclaimed';
+        await RoutingService.routeNewLead({ ...leadData, stage });
+      } catch (routeErr) {
+        // Non-blocking - log but don't fail
+        console.error(`[Routing] Failed routing new lead: ${routeErr.message}`);
+      }
     }
 
     if (errors.length > 0) {

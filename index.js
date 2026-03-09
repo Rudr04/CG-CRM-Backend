@@ -52,7 +52,10 @@ function generateEventId(params) {
   if (messageId) return `msg_${messageId}`;
   if (type === 'whatsapp_flow_reply') return `flow_${waId}`;
   if (type === 'sheet_edit') return `sheet_${timestamp}`;
-  
+  if (type === 'claim_lead' || type === 'transition_stage' || type === 'confirm_payment') {
+    return `pipeline_${type}_${waId}_${timestamp}`;
+  }
+
   return `${type}_${waId}_${Math.floor(timestamp / 10000)}`;
 }
 
