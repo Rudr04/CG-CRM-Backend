@@ -43,10 +43,18 @@ function buildWriteBoth(leadData, historyEntry) {
     // If this was a new lead creation (not an update), route it to appropriate sheets
     if (firestoreResult && firestoreResult.created) {
       try {
+        const { formatDate } = require('../utils/helpers');
         const stage = leadData.stage || FirestoreService.inferStage(leadData.team, leadData.status) || 'unclaimed';
-        await RoutingService.routeNewLead({ ...leadData, stage });
+        const cgid = firestoreResult.cgid || firestoreResult.cgId || '';
+        await RoutingService.routeNewLead({
+          ...leadData,
+          cgid,
+          stage,
+          mobile: leadData.phone || leadData.waId || '',
+          date: leadData.date || formatDate(new Date()),
+          time: leadData.time || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }),
+        });
       } catch (routeErr) {
-        // Non-blocking - log but don't fail
         console.error(`[Routing] Failed routing new lead: ${routeErr.message}`);
       }
     }

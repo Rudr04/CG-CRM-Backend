@@ -117,4 +117,7 @@ async function _processQueue() {
 }
 
 
-module.exports = { enqueue, getStats };
+module.exports = {
+  enqueue,
+  getStats
+};

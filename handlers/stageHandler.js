@@ -71,18 +71,26 @@ async function claimLead(params) {
   // Step 2: Immediate sheet routing (non-blocking on failure)
   if (result.claimed) {
     try {
-      const lead = await FirestoreService.findLeadByPhone(phone);
-      if (lead) {
-        await RoutingService.routeLeadToSheets(lead.data, result.oldStage, result.newStage);
+      const leadData = await getLeadForRouting(phone);
+      if (leadData) {
+        await RoutingService.routeLeadToSheets(leadData, result.oldStage, result.newStage);
       }
     } catch (routeErr) {
-      // Log but don't fail — Firestore is correct, sheets can be fixed
       console.error(`${LOG_PREFIX} Sheet routing failed after claim: ${routeErr.message}`);
     }
   }
 
-  console.log(`${LOG_PREFIX} Lead claim result: ${JSON.stringify(result)}`);
+  console.log(`${LOG_PREFIX} Claim: ${result.claimed ? 'OK' : 'blocked'} | ${phoneNorm}`);
   return result;
+}
+
+// Helper to get lead data for routing
+async function getLeadForRouting(phone) {
+  const lead = await FirestoreService.findLeadByPhone(phone);
+  if (lead) return lead.data;
+  // Fallback: try phone10 lookup
+  const phone10 = normalizePhone(phone).slice(-10);
+  return FirestoreService.getLeadByPhone10(phone10);
 }
 
 
@@ -112,7 +120,7 @@ async function transitionStage(params) {
     const doc = await transaction.get(docRef);
     if (!doc.exists) throw new Error('Lead not found');
 
-    const data = doc.data();
+    const data = doc.data(); 
     const currentStage = data.stage || 'unclaimed';
 
     // Validate transition
@@ -147,9 +155,9 @@ async function transitionStage(params) {
   // Step 2: Immediate sheet routing
   if (result.transitioned) {
     try {
-      const lead = await FirestoreService.findLeadByPhone(phone);
-      if (lead) {
-        await RoutingService.routeLeadToSheets(lead.data, result.from, result.to);
+      const leadData = await getLeadForRouting(phone);
+      if (leadData) {
+        await RoutingService.routeLeadToSheets(leadData, result.from, result.to);
       }
     } catch (routeErr) {
       console.error(`${LOG_PREFIX} Sheet routing failed after transition: ${routeErr.message}`);
@@ -219,9 +227,9 @@ async function confirmPayment(params) {
   // Immediate routing
   if (result.confirmed) {
     try {
-      const lead = await FirestoreService.findLeadByPhone(phone);
-      if (lead) {
-        await RoutingService.routeLeadToSheets(lead.data, result.from, result.to);
+      const leadData = await getLeadForRouting(phone);
+      if (leadData) {
+        await RoutingService.routeLeadToSheets(leadData, result.from, result.to);
       }
     } catch (routeErr) {
       console.error(`${LOG_PREFIX} Sheet routing failed after payment: ${routeErr.message}`);
@@ -247,6 +255,7 @@ async function getLeadHistory(params) {
 
   return {
     found: true,
+    cgid: lead.data.cgid || lead.data.cgId || '',
     phone: lead.data.phoneNormalized || lead.data.phone10 || '',
     name: lead.data.name || '',
     stage: lead.data.stage || 'unknown',

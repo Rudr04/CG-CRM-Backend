@@ -4,7 +4,7 @@
 //  Run locally: node scripts/backfill.js
 //
 //  Reads all rows from Sheet5, creates/updates Firestore docs
-//  with proper stage field based on Team + Status inference
+//  with proper stage field, CGID generation, and Phase 3 fields
 // ============================================================================
 
 require('dotenv').config();
@@ -18,6 +18,30 @@ if (!admin.apps.length) {
   });
 }
 const db = admin.firestore();
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CGID GENERATION — same atomic counter as firestoreService
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function generateCGID() {
+  const now = new Date();
+  const monthKey = String(now.getFullYear()).slice(-2)
+                 + String(now.getMonth() + 1).padStart(2, '0');
+
+  const counterRef = db.doc('counters/cgid');
+
+  const cgid = await db.runTransaction(async (t) => {
+    const doc = await t.get(counterRef);
+    const data = doc.exists ? doc.data() : {};
+    const current = data[monthKey] || 0;
+    const next = current + 1;
+    t.set(counterRef, { [monthKey]: next }, { merge: true });
+    return `CG-${monthKey}-${next}`;
+  });
+
+  return cgid;
+}
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -41,7 +65,7 @@ function inferStage(team, status) {
 //  DATE PARSER
 // ═══════════════════════════════════════════════════════════════════════════
 
-function parseSheetDate(dateStr, timeStr) {
+function parseSheetDate(dateStr) {
   try {
     if (!dateStr) return new Date().toISOString();
     const d = new Date(dateStr);
@@ -58,7 +82,7 @@ function parseSheetDate(dateStr, timeStr) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function backfill() {
-  console.log('Starting backfill...');
+  console.log('Starting Phase 3 backfill with CGID generation...');
 
   const auth = new google.auth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
@@ -88,38 +112,6 @@ async function backfill() {
     const status = (row[11] || '').trim();
     const stage = inferStage(team, status);
 
-    const doc = {
-      phone: row[4] || '',
-      phoneNormalized: phone,
-      phone10: phone,
-      name: (row[3] || '').trim(),
-      email: '',
-      stage: stage,
-      status: status || 'Lead',
-      agent: team || 'Not Assigned',
-      location: (row[6] || '').trim(),
-      product: (row[7] || '').trim() || 'CGI',
-      source: (row[9] || '').trim(),
-      message: (row[8] || '').trim(),
-      remark: (row[14] || '').trim(),
-      regiNo: (row[5] || '').trim(),
-      rating: (row[12] || '').trim(),
-      team2: (row[15] || '').trim(),
-      status2: (row[16] || '').trim(),
-      remark2: (row[17] || '').trim(),
-      createdDate: (row[1] || '').trim(),
-      createdTime: (row[2] || '').trim(),
-      createdAt: parseSheetDate(row[1], row[2]),
-      updatedAt: new Date().toISOString(),
-      sheetRow: i + 2,
-      history: [{
-        action: 'backfill_from_sheet',
-        by: 'system',
-        at: new Date().toISOString(),
-        details: { source: 'phase3_migration', originalRow: i + 2 }
-      }]
-    };
-
     try {
       const docRef = db.collection('leads').doc(phone);
       const existing = await docRef.get();
@@ -129,15 +121,39 @@ async function backfill() {
         const existingData = existing.data();
         const updates = { updatedAt: new Date().toISOString() };
 
+        // Generate CGID if missing
+        if (!existingData.cgid) {
+          updates.cgid = await generateCGID();
+          updates.cgId = updates.cgid; // backward compat
+        }
+
         if (!existingData.stage || existingData.stage === 'Not Assigned') {
           updates.stage = stage;
         }
         // Fill in any missing fields from sheet
-        if (!existingData.name && doc.name) updates.name = doc.name;
-        if (!existingData.location && doc.location) updates.location = doc.location;
-        if (!existingData.source && doc.source) updates.source = doc.source;
-        if (!existingData.createdDate && doc.createdDate) updates.createdDate = doc.createdDate;
-        if (!existingData.createdTime && doc.createdTime) updates.createdTime = doc.createdTime;
+        if (!existingData.name && (row[3] || '').trim()) updates.name = (row[3] || '').trim();
+        if (!existingData.location && (row[6] || '').trim()) updates.location = (row[6] || '').trim();
+        if (!existingData.source && (row[9] || '').trim()) updates.source = (row[9] || '').trim();
+        if (!existingData.date && (row[1] || '').trim()) updates.date = (row[1] || '').trim();
+        if (!existingData.time && (row[2] || '').trim()) updates.time = (row[2] || '').trim();
+
+        // Ensure Phase 3 fields exist
+        if (!existingData.inq) updates.inq = '';
+        if (!existingData.cbDate) updates.cbDate = '';
+        if (!existingData.salesRemark) updates.salesRemark = '';
+        if (!existingData.approvalDate) updates.approvalDate = '';
+        if (!existingData.quantity) updates.quantity = '';
+        if (!existingData.productPrice) updates.productPrice = '';
+        if (!existingData.amountPaid) updates.amountPaid = '';
+        if (!existingData.pendingAmount) updates.pendingAmount = '';
+        if (!existingData.modeOfPay) updates.modeOfPay = '';
+        if (!existingData.paymentRefId) updates.paymentRefId = '';
+        if (!existingData.dateOfPayment) updates.dateOfPayment = '';
+        if (!existingData.receivedAccount) updates.receivedAccount = '';
+        if (!existingData.deliveryStatus) updates.deliveryStatus = '';
+        if (!existingData.deliveryDate) updates.deliveryDate = '';
+        if (!existingData.deliveryRemark) updates.deliveryRemark = '';
+        if (!existingData.mobile) updates.mobile = row[4] || '';
 
         updates.history = admin.firestore.FieldValue.arrayUnion({
           action: 'backfill_merge',
@@ -149,6 +165,65 @@ async function backfill() {
         await docRef.update(updates);
         updated++;
       } else {
+        // Generate CGID for new doc
+        const cgid = await generateCGID();
+
+        const doc = {
+          cgid,
+          cgId: cgid, // backward compat
+          phone: row[4] || '',
+          phoneNormalized: phone,
+          phone10: phone,
+          mobile: row[4] || '',
+          name: (row[3] || '').trim(),
+          email: '',
+          stage,
+          status: status || 'Lead',
+          agent: team || 'Not Assigned',
+          team: team || 'Not Assigned',
+          location: (row[6] || '').trim(),
+          inq: '',
+          product: (row[7] || '').trim() || 'CGI',
+          source: (row[9] || '').trim(),
+          message: (row[8] || '').trim(),
+          remark: (row[14] || '').trim(),
+          cbDate: '',
+          rating: (row[12] || '').trim(),
+          regiNo: (row[5] || '').trim(),
+
+          // Sales fields
+          salesRemark: '',
+          approvalDate: '',
+
+          // Payment fields
+          quantity: '',
+          productPrice: '',
+          amountPaid: '',
+          pendingAmount: '',
+          modeOfPay: '',
+          paymentRefId: '',
+          dateOfPayment: '',
+          receivedAccount: '',
+
+          // Delivery fields
+          deliveryStatus: '',
+          deliveryDate: '',
+          deliveryRemark: '',
+
+          // Metadata
+          date: (row[1] || '').trim(),
+          time: (row[2] || '').trim(),
+          createdAt: parseSheetDate(row[1]),
+          updatedAt: new Date().toISOString(),
+          sheetRow: i + 2,
+          history: [{
+            action: 'backfill_from_sheet',
+            by: 'system',
+            at: new Date().toISOString(),
+            details: { source: 'phase3_migration', originalRow: i + 2, cgid }
+          }]
+        };
+
         await docRef.set(doc);
         created++;
       }

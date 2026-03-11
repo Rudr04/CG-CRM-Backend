@@ -14,15 +14,30 @@ const LOG_PREFIX = '[Sync]';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const FIELD_MAP = {
-  'name': 'name',
-  'location': 'location',
-  'team': 'agent',
-  'status': 'status',
-  'rating': 'rating',
-  'remark': 'remark',
-  'team_2': 'team2',
-  'status_2': 'status2',
-  'remark_2': 'remark2',
+  'name':            'name',
+  'location':        'location',
+  'team':            'team',
+  'status':          'status',
+  'rating':          'rating',
+  'remark':          'remark',
+  'cbDate':          'cbDate',
+  'inq':             'inq',
+  'product':         'product',
+  'salesRemark':     'salesRemark',
+  'quantity':        'quantity',
+  'productPrice':    'productPrice',
+  'amountPaid':      'amountPaid',
+  'modeOfPay':       'modeOfPay',
+  'paymentRefId':    'paymentRefId',
+  'dateOfPayment':   'dateOfPayment',
+  'receivedAccount': 'receivedAccount',
+  'deliveryStatus':  'deliveryStatus',
+  'deliveryDate':    'deliveryDate',
+  'deliveryRemark':  'deliveryRemark',
+  // Legacy mappings
+  'team_2':          'team2',
+  'status_2':        'status2',
+  'remark_2':        'remark2',
 };
 
 
@@ -131,8 +146,9 @@ async function processEdit(edit, editor) {
   const result = await FirestoreService.updateLead(phone, updates, historyEntry);
   if (!result) return { success: false, reason: 'update_failed' };
 
-  console.log(`${LOG_PREFIX} ${existing.data.cgId}: ${field} → "${(newValue || '').substring(0, 30)}"`);
-  return { success: true, cgId: existing.data.cgId };
+  const leadCgid = existing.data.cgid || existing.data.cgId || '';
+  console.log(`${LOG_PREFIX} ${leadCgid}: ${field} → "${(newValue || '').substring(0, 30)}"`);
+  return { success: true, cgid: leadCgid };
 }
 
 

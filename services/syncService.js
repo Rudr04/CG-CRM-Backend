@@ -102,7 +102,7 @@ async function syncToSheets() {
   // For each sync target, filter leads and write
   for (const target of config.SYNC_TARGETS) {
     if (!target.id) {
-      console.log(`${LOG_PREFIX} Skipping "${target.name}" — no spreadsheet ID configured`);
+      console.log(`${LOG_PREFIX} Skipping "${target.role}" — no spreadsheet ID configured`);
       continue;
     }
 
@@ -113,9 +113,9 @@ async function syncToSheets() {
     try {
       await writeLeadsToSheet(api, target, matchingLeads);
       targetsWritten++;
-      console.log(`${LOG_PREFIX} Wrote ${matchingLeads.length} leads to "${target.name}"`);
+      console.log(`${LOG_PREFIX} Wrote ${matchingLeads.length} leads to "${target.role}"`);
     } catch (err) {
-      console.error(`${LOG_PREFIX} Failed writing to "${target.name}": ${err.message}`);
+      console.error(`${LOG_PREFIX} Failed writing to "${target.role}": ${err.message}`);
     }
   }
 
@@ -150,7 +150,7 @@ async function writeLeadsToSheet(api, target, leads) {
       if (phone) existingPhones[phone] = i + 2; // row number (1-based, +1 for header)
     });
   } catch (err) {
-    console.warn(`${LOG_PREFIX} Could not read existing data from "${target.name}": ${err.message}`);
+    console.warn(`${LOG_PREFIX} Could not read existing data from "${target.role}": ${err.message}`);
     // If sheet doesn't exist or is empty, we'll append everything
   }
 

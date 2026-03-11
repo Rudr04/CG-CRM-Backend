@@ -137,7 +137,7 @@ module.exports = {
     INTERESTED: 'EPXcDmp'
   },
 
-  // ─── Sheet Column Indices (0-based) ───────────────────────────────────────
+  // ─── Sheet Column Indices (0-based) — Legacy Sheet5 ──────────────────────
   SHEET_COLUMNS: {
     CGILN: 0,
     DATE: 1,
@@ -168,6 +168,70 @@ module.exports = {
     INTERACTION: 26
   },
 
+  // ─── Field Definitions (Firestore key → Sheet header) ──────────────────
+  FIELD_DEFS: {
+    cgid:            'CGID',
+    date:            'Date',
+    time:            'Time',
+    name:            'Name',
+    mobile:          'Mobile Number',
+    location:        'Location',
+    inq:             'Inquiry',
+    product:         'Product',
+    source:          'Source',
+    team:            'Team',
+    status:          'Status',
+    rating:          'Rating',
+    remark:          'Remark',
+    cbDate:          'CB Date',
+    stage:           'Stage',
+    salesRemark:     'Sales Remark',
+    approvalDate:    'Approval Date',
+    quantity:        'Quantity',
+    productPrice:    'Product Price',
+    amountPaid:      'Amount Paid',
+    pendingAmount:   'Pending Amount',
+    modeOfPay:       'Mode of Pay',
+    paymentRefId:    'Payment Ref. ID',
+    dateOfPayment:   'Date of Payment',
+    receivedAccount: 'Received Account',
+    deliveryStatus:  'Delivery Status',
+    deliveryDate:    'Delivery Date',
+    deliveryRemark:  'Delivery Remark',
+  },
+
+  // ─── Sheet Schemas (which fields each sheet shows, in order) ───────────
+  SHEET_SCHEMAS: {
+    AGENTS: [
+      'cgid','date','time','name','mobile','location',
+      'inq','product','source','team','status','rating',
+      'remark','cbDate','stage'
+    ],
+    SALES: [
+      'cgid','date','name','mobile','location',
+      'inq','product','source','team','status','rating',
+      'remark','salesRemark','approvalDate','stage'
+    ],
+    PAYMENTS: [
+      'cgid','name','mobile','product','quantity',
+      'productPrice','amountPaid','pendingAmount','modeOfPay',
+      'paymentRefId','dateOfPayment','receivedAccount','remark','stage'
+    ],
+    DELIVERY: [
+      'cgid','name','mobile','product','quantity',
+      'amountPaid','deliveryStatus','deliveryDate','remark','stage'
+    ],
+    MASTER: [
+      'cgid','date','time','name','mobile','location',
+      'inq','product','source','team','status','rating',
+      'remark','cbDate','stage',
+      'salesRemark','approvalDate',
+      'quantity','productPrice','amountPaid','pendingAmount',
+      'modeOfPay','paymentRefId','dateOfPayment','receivedAccount',
+      'deliveryStatus','deliveryDate','deliveryRemark'
+    ],
+  },
+
   // ─── Defaults ─────────────────────────────────────────────────────────────
   DEFAULTS: {
     STATUS: 'Lead',
@@ -176,42 +240,37 @@ module.exports = {
   },
 
   // ─── Multi-Spreadsheet Sync Targets (Phase 3) ────────────────────────────
-  // Each target maps stage(s) to a specific spreadsheet
+  // Each target maps stage(s) to a specific spreadsheet with a role + tab name
   SYNC_TARGETS: [
     {
       id: process.env.SHEET_AGENTS_ID || process.env.SPREADSHEET_ID,
-      name: 'Agents DSR',
-      sheet: 'Sheet5',
+      role: 'AGENTS',
+      sheet: process.env.SHEET_AGENTS_TAB || 'Sheet5',
       filter: (stage) => ['unclaimed', 'Not Assigned', 'agent_working'].includes(stage),
-      columns: 'FULL'
     },
     {
       id: process.env.SHEET_SALES_ID || '',
-      name: 'Sales Review',
-      sheet: 'Review',
+      role: 'SALES',
+      sheet: process.env.SHEET_SALES_TAB || 'Review',
       filter: (stage) => stage === 'sales_review',
-      columns: 'REVIEW'
     },
     {
       id: process.env.SHEET_PAYMENTS_ID || '',
-      name: 'Payments',
-      sheet: 'Payments',
+      role: 'PAYMENTS',
+      sheet: process.env.SHEET_PAYMENTS_TAB || 'Payments',
       filter: (stage) => stage === 'payment_pending',
-      columns: 'PAYMENTS'
     },
     {
       id: process.env.SHEET_DELIVERY_ID || '',
-      name: 'Delivery',
-      sheet: 'Delivery',
+      role: 'DELIVERY',
+      sheet: process.env.SHEET_DELIVERY_TAB || 'Delivery',
       filter: (stage) => stage === 'delivery',
-      columns: 'DELIVERY'
     },
     {
       id: process.env.SHEET_MASTER_ID || '',
-      name: 'Master',
-      sheet: 'All',
+      role: 'MASTER',
+      sheet: process.env.SHEET_MASTER_TAB || 'All',
       filter: () => true,
-      columns: 'MASTER'
     },
   ],
 

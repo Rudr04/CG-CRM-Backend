@@ -8,14 +8,13 @@
 const admin = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const config = require('../config');
-const { normalizePhone, cleanString, nowISO } = require('../utils/helpers');
+const { normalizePhone, cleanString, nowISO, formatDate } = require('../utils/helpers');
 
 const LOG_PREFIX = '[Firestore]';
 
 let db = null;
 
 const COLLECTION = 'leads';
-const COUNTERS_DOC = 'system/counters';
 const FAILED_SYNCS_COLLECTION = 'sync_failures';
 
 
@@ -99,31 +98,32 @@ function extractCountryInfo(phone) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  CGID GENERATION
+//  CGID GENERATION — CG-YYMM-N format (e.g. CG-2603-1, CG-2603-142)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function getNextCgId() {
+async function generateCGID() {
   const firestore = getDb();
-  const counterRef = firestore.doc(COUNTERS_DOC);
-  
-  try {
-    const newId = await firestore.runTransaction(async (transaction) => {
-      const counterDoc = await transaction.get(counterRef);
-      let nextNum = counterDoc.exists ? (counterDoc.data().leadCounter || 0) + 1 : 1;
-      
-      transaction.set(counterRef, { 
-        leadCounter: nextNum,
-        lastUpdated: nowISO()
-      }, { merge: true });
-      
-      return nextNum;
-    });
-    
-    return `CG${String(newId).padStart(5, '0')}`;
-  } catch (error) {
-    console.error(`${LOG_PREFIX} getNextCgId error: ${error.message}`);
-    return `CG${Date.now().toString(36).toUpperCase()}`;
-  }
+  const now = new Date();
+  const monthKey = String(now.getFullYear()).slice(-2)
+                 + String(now.getMonth() + 1).padStart(2, '0');
+
+  const counterRef = firestore.doc('counters/cgid');
+
+  const cgid = await firestore.runTransaction(async (t) => {
+    const doc = await t.get(counterRef);
+    const data = doc.exists ? doc.data() : {};
+    const current = data[monthKey] || 0;
+    const next = current + 1;
+    t.set(counterRef, { [monthKey]: next }, { merge: true });
+    return `CG-${monthKey}-${next}`;
+  });
+
+  return cgid;
+}
+
+// Legacy alias for backward compatibility
+async function getNextCgId() {
+  return generateCGID();
 }
 
 
@@ -226,46 +226,84 @@ async function createLead(leadData) {
 
     const existing = await findLeadByPhone(phone);
     if (existing) {
-      console.log(`${LOG_PREFIX} Lead exists: ${existing.data.cgId}`);
-      return { docId: existing.docId, cgId: existing.data.cgId, created: false };
+      console.log(`${LOG_PREFIX} Lead exists: ${existing.data.cgid || existing.data.cgId}`);
+      return { docId: existing.docId, cgId: existing.data.cgid || existing.data.cgId, cgid: existing.data.cgid || existing.data.cgId, created: false };
     }
 
-    const cgId = await getNextCgId();
+    const cgid = await generateCGID();
     const now = nowISO();
     const countryInfo = extractCountryInfo(phone);
+    const phone10 = phoneNorm.slice(-10);
+
+    const stage = leadData.stage || inferStage(leadData.team, leadData.status) || 'unclaimed';
 
     const doc = {
-      cgId,
+      cgid,
+      cgId: cgid,  // backward compat alias
       phone,
       phoneNormalized: phoneNorm,
+      phone10,
       countryISO: countryInfo.iso,
       countryCode: countryInfo.countryCode,
       localNumber: countryInfo.localNumber,
       name: cleanString(leadData.name || leadData.senderName),
       email: cleanString(leadData.email),
-      stage: leadData.stage || inferStage(leadData.team, leadData.status) || 'unclaimed',
+
+      stage,
       status: leadData.status || config.DEFAULTS.STATUS,
       agent: leadData.team || config.STAGES.NOT_ASSIGNED,
+      team: leadData.team || config.STAGES.NOT_ASSIGNED,
+
       location: cleanString(leadData.location),
+      inq: cleanString(leadData.inq),
       product: leadData.product || config.DEFAULTS.PRODUCT,
       source: cleanString(leadData.source),
       message: cleanString(leadData.message),
       remark: cleanString(leadData.remark),
+      cbDate: '',
+      rating: '',
       regiNo: cleanString(leadData.regiNo),
+
+      // Sales fields (empty until sales review)
+      salesRemark: '',
+      approvalDate: '',
+
+      // Payment fields (empty until payment)
+      quantity: '',
+      productPrice: '',
+      amountPaid: '',
+      pendingAmount: '',
+      modeOfPay: '',
+      paymentRefId: '',
+      dateOfPayment: '',
+      receivedAccount: '',
+
+      // Delivery fields (empty until delivery)
+      deliveryStatus: '',
+      deliveryDate: '',
+      deliveryRemark: '',
+
+      // Metadata
+      date: leadData.date || formatDate(new Date()),
+      time: leadData.time || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }),
       createdAt: now,
       updatedAt: now,
       sheetRow: leadData.sheetRow || null,
+
+      // Mobile number field for sheet routing (matches 'Mobile Number' header)
+      mobile: phone,
+
       history: [{
         action: 'lead_created',
         by: 'system',
         at: now,
-        details: { source: leadData.source || '', channel: leadData.channel || 'webhook' }
+        details: { source: leadData.source || '', channel: leadData.channel || 'webhook', cgid }
       }]
     };
 
     const docRef = await firestore.collection(COLLECTION).add(doc);
-    console.log(`${LOG_PREFIX} Lead created: ${cgId} (${docRef.id})`);
-    return { docId: docRef.id, cgId, created: true };
+    console.log(`${LOG_PREFIX} Lead created: ${cgid} (${docRef.id})`);
+    return { docId: docRef.id, cgId: cgid, cgid, created: true };
 
   } catch (error) {
     console.error(`${LOG_PREFIX} createLead error: ${error.message}`);
@@ -388,6 +426,7 @@ module.exports = {
   addHistory,
   createOrUpdateLead,
   getNextCgId,
+  generateCGID,
   extractCountryInfo,
   inferStage,
   storeSyncFailure,
