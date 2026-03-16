@@ -110,7 +110,7 @@ module.exports = {
 
   // ─── Pipeline Stages ──────────────────────────────────────────────────────
   STAGES: {
-    NOT_ASSIGNED: 'Not Assigned',
+    NOT_ASSIGNED: 'unclaimed',
     AGENT_WORKING: 'agent_working',
     SALES_REVIEW: 'sales_review',
     PAYMENT_PENDING: 'payment_pending',

@@ -206,7 +206,7 @@ async function updateContactCells(row, fields) {
 //  Sets name, regiNo (form_num), and status on the matching row.
 //  NO Firestore calls — handler does that separately.
 // ═════════════════════════════════════════════════════════════
-async function updateFormData(params) {
+async function updateFormData(params, knownRow) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
@@ -217,19 +217,22 @@ async function updateFormData(params) {
 
   if (!waId) throw new Error('wa_num is missing');
 
-  const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
-  });
+  let targetRow = knownRow || null;
 
-  const rows = response.data.values || [];
-  const matchingRowIndex = rows.findIndex(row =>
-    row[config.SHEET_COLUMNS.NUMBER]?.toString() === waId.toString()
-  );
+  if (!targetRow) {
+    const response = await api.spreadsheets.values.get({
+      spreadsheetId: config.SPREADSHEET_ID,
+      range: `${sheetName}!A2:Z`
+    });
 
-  if (matchingRowIndex === -1) throw new Error('No match found');
+    const rows = response.data.values || [];
+    const matchingRowIndex = rows.findIndex(row =>
+      phoneNumbersMatch(row[config.SHEET_COLUMNS.NUMBER] || '', waId)
+    );
 
-  const targetRow = matchingRowIndex + 2;
+    if (matchingRowIndex === -1) throw new Error('No match found');
+    targetRow = matchingRowIndex + 2;
+  }
   const statusValue = option === "Offline (અમદાવાદ ક્લાસ માં)"
     ? "Ahm MC Link Sent"
     : "Online MC Link Sent";

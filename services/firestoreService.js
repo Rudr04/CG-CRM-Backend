@@ -171,7 +171,7 @@ async function createLead(leadData) {
       localNumber: countryInfo.localNumber,
       name: cleanString(leadData.name || leadData.senderName),
       email: cleanString(leadData.email),
-      stage: leadData.team || config.STAGES.NOT_ASSIGNED,
+      stage: config.STAGES.NOT_ASSIGNED || leadData.stage || 'unclaimed',
       status: leadData.status || config.DEFAULTS.STATUS,
       agent: leadData.team || config.STAGES.NOT_ASSIGNED,
       location: cleanString(leadData.location),
@@ -197,7 +197,7 @@ async function createLead(leadData) {
 
   } catch (error) {
     console.error(`${LOG_PREFIX} createLead error: ${error.message}`);
-    return null;
+    return error;
   }
 }
 
@@ -229,7 +229,7 @@ async function updateLead(phone, updates, historyEntry) {
 
   } catch (error) {
     console.error(`${LOG_PREFIX} updateLead error: ${error.message}`);
-    return null;
+    return error;
   }
 }
 
@@ -280,7 +280,7 @@ async function createOrUpdateLead(leadData, historyEntry) {
     return await createLead(leadData);
   } catch (error) {
     console.error(`${LOG_PREFIX} createOrUpdateLead error: ${error.message}`);
-    return null;
+    return error;
   }
 }
 

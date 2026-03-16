@@ -39,7 +39,7 @@ async function addToWhitelist(phoneNumber, name, source = 'unknown') {
 
   } catch (error) {
     console.error(`${LOG_PREFIX} Whitelist error: ${error.message}`);
-    return null;
+    throw error;
   }
 }
 

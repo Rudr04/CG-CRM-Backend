@@ -2,7 +2,8 @@
 //  formHandler.js — WhatsApp Form Submission Orchestrator
 //
 //  Writes to BOTH Firestore and Sheet transactionally.
-//  Side-effects (Firebase whitelist, WATI confirmation) are non-transactional.
+//  Firebase whitelist is inside the transactional closure (critical for login).
+//  WATI confirmation is the only non-transactional side-effect.
 // ============================================================================
 
 const SheetService     = require('../services/sheetsService');
@@ -22,10 +23,19 @@ async function handleFormSubmission(params) {
     ? "Ahm MC Link Sent"
     : "Online MC Link Sent";
 
+  const whitelistPhone = formNum || phone;
+
   const writeBoth = async () => {
     const errors = [];
 
-    // Firestore: upsert lead with form data
+    // 1. Firebase RTDB whitelist (CRITICAL — user can't login without this)
+    try {
+      if (whitelistPhone && name) {
+        await FirebaseService.addToWhitelist(whitelistPhone, name, 'whatsapp_form');
+      }
+    } catch (e) { errors.push(`whitelist: ${e.message}`); }
+
+    // 2. Firestore lead record (main DB)
     try {
       await FirestoreService.createOrUpdateLead({
         phone, name, regiNo: formNum, status: statusValue,
@@ -35,15 +45,13 @@ async function handleFormSubmission(params) {
       });
     } catch (e) { errors.push(`firestore: ${e.message}`); }
 
-    // Sheet: upsert contact first (creates row if doesn't exist), then update form fields
+    // 3. Sheet write (agent frontend)
     try {
-      // Ensure contact row exists
-      await SheetService.upsertContact({
-        phone, name, source: 'WhatsApp Form',
+      const upsertResult = await SheetService.upsertContact({
+        phone, name, source: 'WhatsApp',
         remark: `Form submitted: ${option}`, product: 'CGI',
       });
-      // Update form-specific fields (name, regiNo, status) on the row
-      await SheetService.updateFormData(params);
+      await SheetService.updateFormData(params, upsertResult.row);
     } catch (e) { errors.push(`sheet: ${e.message}`); }
 
     if (errors.length) throw new Error(errors.join('; '));
@@ -58,13 +66,8 @@ async function handleFormSubmission(params) {
     console.error(`[FormHandler] Write failed, queued: ${err.message}`);
   }
 
-  // Side-effects (non-transactional)
-  const whitelistPhone = formNum || phone;
-  if (whitelistPhone && name) {
-    FirebaseService.addToWhitelist(whitelistPhone, name, 'whatsapp_form')
-      .catch(e => console.error(`[Firebase] whitelist: ${e.message}`));
-  }
-
+  // 4. WATI confirmation (only true side-effect — fire-and-forget)
+  //    User is already whitelisted + registered even without this message
   WatiService.sendRegistrationConfirmation(params)
     .catch(e => console.error(`[WATI] confirmation: ${e.message}`));
 

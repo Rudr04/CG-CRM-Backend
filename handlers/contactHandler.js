@@ -22,18 +22,26 @@ const config = require('../config');
 //  Both services use upsert/merge so this is idempotent and
 //  safe to retry.
 // ─────────────────────────────────────────────────────────────
-function buildWriteBoth(leadData, historyEntry) {
+function buildWriteBoth(leadData, historyEntry, customFirestoreWrite, customSheetWrite) {
   return async () => {
     const errors = [];
 
     try {
-      await FirestoreService.createOrUpdateLead(leadData, historyEntry);
+      if (customFirestoreWrite) {
+        await customFirestoreWrite();
+      } else {
+        await FirestoreService.createOrUpdateLead(leadData, historyEntry);
+      }
     } catch (e) {
       errors.push(`firestore: ${e.message}`);
     }
 
     try {
-      await SheetService.upsertContact(leadData);
+      if (customSheetWrite) {
+        await customSheetWrite();
+      } else {
+        await SheetService.upsertContact(leadData);
+      }
     } catch (e) {
       errors.push(`sheet: ${e.message}`);
     }
@@ -284,32 +292,26 @@ async function handleCommunityJoin(params) {
   const assignRobo  = currentTeam === 'Not Assigned';
   const newTeam     = assignRobo ? 'ROBO' : currentTeam;
 
-  const writeBoth = async () => {
-    const errors = [];
+  const fsUpdates = { status: newStatus };
+  if (assignRobo) { fsUpdates.agent = 'ROBO'; fsUpdates.stage = 'ROBO'; }
 
-    // Firestore update
-    try {
-      const fsUpdates = { status: newStatus };
-      if (assignRobo) { fsUpdates.agent = 'ROBO'; fsUpdates.stage = 'ROBO'; }
-      await FirestoreService.updateLead(phone, fsUpdates, {
-        action: 'community_joined', by: 'system',
-        details: { status: newStatus, groupType: isOnline ? 'online' : 'ahmedabad' }
-      });
-    } catch (e) { errors.push(`firestore: ${e.message}`); }
-
-    // Sheet update
-    try {
-      if (sheetRow) {
-        const cellUpdates = { status: newStatus };
-        if (assignRobo) cellUpdates.team = 'ROBO';
-        await SheetService.updateContactCells(sheetRow, cellUpdates);
-      }
-    } catch (e) { errors.push(`sheet: ${e.message}`); }
-
-    if (errors.length) throw new Error(errors.join('; '));
+  const customFirestore = async () => {
+    await FirestoreService.updateLead(phone, fsUpdates, {
+      action: 'community_joined', by: 'system',
+      details: { status: newStatus, groupType: isOnline ? 'online' : 'ahmedabad' }
+    });
   };
 
-  await tryWriteOrQueue(writeBoth, `community_${phone}_${Date.now()}`, {
+  const customSheet = async () => {
+    if (sheetRow) {
+      const cellUpdates = { status: newStatus };
+      if (assignRobo) cellUpdates.team = 'ROBO';
+      await SheetService.updateContactCells(sheetRow, cellUpdates);
+    }
+  };
+
+  const writeFn = buildWriteBoth(null, null, customFirestore, customSheet);
+  await tryWriteOrQueue(writeFn, `community_${phone}_${Date.now()}`, {
     phone, handler: 'handleCommunityJoin'
   });
 
@@ -339,18 +341,35 @@ async function handleRegistrationCheck(params) {
     }
 
     console.log(`${waId} not whitelisted – adding now`);
-    try {
+
+    const whitelistFn = async () => {
       await FirebaseService.addToWhitelist(waId, senderName || waId, 'self_registration');
+    };
+
+    let whitelistSuccess = false;
+    try {
+      await whitelistFn();
+      whitelistSuccess = true;
     } catch (fbError) {
-      console.error(`Firebase whitelist error for ${waId}: ${fbError.message}`);
+      PendingQueue.enqueue(`whitelist_${waId}_${Date.now()}`, whitelistFn, {
+        phone: waId, handler: 'handleRegistrationCheck_whitelist'
+      });
+      console.error(`[Registration] Whitelist failed, queued for retry: ${fbError.message}`);
     }
 
-    await WatiService.sendSessionMessage(
-      waId,
-      `You were not registered in our system,\nbut we have registered you right now *${waId}*.\n\n*You are now Registered! ✓*`
-    );
-
-    return { message: 'registered_and_notified' };
+    if (whitelistSuccess) {
+      await WatiService.sendSessionMessage(
+        waId,
+        `You were not registered in our system,\nbut we have registered you right now *${waId}*.\n\n*You are now Registered! ✓*`
+      );
+      return { message: 'newly_whitelisted', registeredNumber: waId };
+    } else {
+      await WatiService.sendSessionMessage(
+        waId,
+        `We are processing your registration. Please try again in a few minutes.`
+      );
+      return { message: 'whitelist_queued', registeredNumber: waId };
+    }
 
   } catch (error) {
     if (error instanceof ValidationError) throw error;
