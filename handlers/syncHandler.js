@@ -114,7 +114,7 @@ async function processEdit(edit, editor) {
     if (!existing) return { success: false, reason: 'create_verification_failed' };
   }
 
-  const updates = { [firestoreField]: newValue || '', sheetRow: row };
+  const updates = { [firestoreField]: newValue || ''};
 
   if (field === 'team') {
     const isNotAssigned = !newValue || newValue === config.STAGES.NOT_ASSIGNED;
