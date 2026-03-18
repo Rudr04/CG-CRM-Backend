@@ -43,8 +43,7 @@ async function handleSheetEdit(params) {
       edit.retryCount = (edit.retryCount || 0) + 1;
       edit.failReason = error.message;
       results.failed.push(edit);
-      
-      FirestoreService.storeSyncFailure(edit, error).catch(() => {});
+      // Edit is in results.failed → returned to GAS → GAS dead letter queue handles retry
     }
   }
 

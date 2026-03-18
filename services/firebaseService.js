@@ -24,23 +24,18 @@ async function addToWhitelist(phoneNumber, name, source = 'unknown') {
   const sanitizedPhone = sanitizePhoneForFirebase(phoneNumber);
   const url = `${config.FIREBASE.DATABASE_URL}whitelist/${sanitizedPhone}.json?auth=${config.FIREBASE.SECRET}`;
 
-  try {
-    const response = await axios.put(url, {
-      name: cleanString(name),
-      source,
-      timestamp: nowISO()
-    }, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: config.TIMEOUTS.FIREBASE
-    });
+  const response = await axios.put(url, {
+    name: cleanString(name),
+    source,
+    timestamp: nowISO()
+  }, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: config.TIMEOUTS.FIREBASE
+  });
 
-    console.log(`${LOG_PREFIX} Added to whitelist: ${sanitizedPhone}`);
-    return response.data;
-
-  } catch (error) {
-    console.error(`${LOG_PREFIX} Whitelist error: ${error.message}`);
-    throw error;
-  }
+  console.log(`${LOG_PREFIX} Added to whitelist: ${sanitizedPhone}`);
+  return response.data;
+  // Network/auth errors throw naturally → caught by formHandler's writeBoth → PendingQueue retry
 }
 
 

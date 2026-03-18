@@ -251,23 +251,26 @@ async function handleCommunityJoin(params) {
 
   // Look up lead: try Firestore first, then Sheet
   let currentStatus = '';
-  let currentTeam   = 'Not Assigned';
+  let currentTeam   = config.DEFAULTS.TEAM;
   let sheetRow      = null;
 
-  const firestoreLead = await FirestoreService.findLeadByPhone(phone);
-  if (firestoreLead) {
-    currentStatus = firestoreLead.data.status || '';
-    currentTeam   = firestoreLead.data.agent || 'Not Assigned';
-    sheetRow      = firestoreLead.data.sheetRow || null;
+  let firestoreLead = null;
+  try {
+    firestoreLead = await FirestoreService.findLeadByPhone(phone);
+  } catch (e) {
+    console.warn(`[CommunityJoin] Firestore lookup failed, falling back to Sheet: ${e.message}`);
   }
 
-  // Fallback: check Sheet if not in Firestore
-  if (!firestoreLead) {
+  if (firestoreLead) {
+    currentStatus = firestoreLead.data.status || '';
+    currentTeam   = firestoreLead.data.agent || config.DEFAULTS.TEAM;
+    sheetRow      = firestoreLead.data.sheetRow || null;
+  } else {
     const sheetLead = await SheetService.findByPhone(phone);
     if (!sheetLead) return { message: 'Phone not found' };
     sheetRow      = sheetLead.row;
     currentStatus = sheetLead.data[config.SHEET_COLUMNS.STATUS] || '';
-    currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || 'Not Assigned';
+    currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || config.DEFAULTS.TEAM;
   }
 
   const newStatus   = currentStatus.includes('Online') ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
