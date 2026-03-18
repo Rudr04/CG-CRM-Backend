@@ -50,36 +50,26 @@ async function upsertContact(leadData) {
 
   if (existing) {
     // ── Update existing row ──
-    const updates = [];
     const C = config.SHEET_COLUMNS;
+    const cellUpdates = {};
 
+    // Append fields (merge with existing)
     if (leadData.message) {
       const current = existing.data[C.MESSAGE] || '';
-      const merged = current ? `${current} | ${leadData.message}` : leadData.message;
-      updates.push({ range: `${sheetName}!I${existing.row}`, values: [[merged]] });
+      cellUpdates[C.MESSAGE] = current ? `${current} | ${leadData.message}` : leadData.message;
     }
     if (leadData.remark) {
       const current = existing.data[C.REMARK] || '';
-      const merged = current ? `${current} | ${leadData.remark}` : leadData.remark;
-      updates.push({ range: `${sheetName}!O${existing.row}`, values: [[merged]] });
-    }
-    // Fill in blanks (don't overwrite existing values)
-    if (leadData.name && !existing.data[C.NAME]) {
-      updates.push({ range: `${sheetName}!D${existing.row}`, values: [[leadData.name]] });
-    }
-    if (leadData.location && !existing.data[C.LOCATION]) {
-      updates.push({ range: `${sheetName}!G${existing.row}`, values: [[leadData.location]] });
-    }
-    if (leadData.source && !existing.data[C.SOURCE]) {
-      updates.push({ range: `${sheetName}!J${existing.row}`, values: [[leadData.source]] });
+      cellUpdates[C.REMARK] = current ? `${current} | ${leadData.remark}` : leadData.remark;
     }
 
-    if (updates.length > 0) {
-      await api.spreadsheets.values.batchUpdate({
-        spreadsheetId: config.SPREADSHEET_ID,
-        requestBody: { valueInputOption: 'RAW', data: updates }
-      });
-      console.log(`[Sheet] Updated row ${existing.row} for ${getLastTenDigits(phone)}`);
+    // Fill blanks (don't overwrite existing)
+    if (leadData.name && !existing.data[C.NAME])         cellUpdates[C.NAME] = leadData.name;
+    if (leadData.location && !existing.data[C.LOCATION]) cellUpdates[C.LOCATION] = leadData.location;
+    if (leadData.source && !existing.data[C.SOURCE])     cellUpdates[C.SOURCE] = leadData.source;
+
+    if (Object.keys(cellUpdates).length > 0) {
+      await updateContactCells(existing.row, cellUpdates);
     }
 
     return { row: existing.row, action: 'updated' };
@@ -107,35 +97,26 @@ async function upsertContact(leadData) {
     const remark   = leadData.remark || '';
     const status   = leadData.status || 'Lead';
 
-    const rowData = [
-      '=ROW()-1+230000',                                                     // A: CGILN
-      date,                                                                  // B: DATE
-      time,                                                                  // C: TIME
-      name,                                                                  // D: NAME
-      phone,                                                                 // E: NUMBER
-      '',                                                                    // F: REGI_NO
-      location,                                                              // G: LOCATION
-      product,                                                               // H: PRODUCT
-      message,                                                               // I: MESSAGE
-      source,                                                                // J: SOURCE
-      team,                                                                  // K: TEAM
-      status,                                                                // L: STATUS
-      '',                                                                    // M: RATING
-      '',                                                                    // N: ACTION/CB_DATE
-      remark,                                                                // O: REMARK
-      '',                                                                    // P: TEAM_2
-      '',                                                                    // Q: STATUS_2
-      '',                                                                    // R: REMARK_2
-      '',                                                                    // S: CONF_CB_PRIORITY
-      '',                                                                    // T: CONFIRMATION
-      '',                                                                    // U: JOIN_POLL
-      '',                                                                    // V: NO_WITHOUT_91
-      `=IFERROR(WEEKDAY($B${nextRow},2)&TEXT($B${nextRow},"dddd"), "")`,     // W: DAY
-      `=IFERROR(HOUR($C${nextRow}), "")`,                                    // X: HOURS
-      `=SWITCH(L${nextRow},"Admission Done",1,"Seat Booked",1,0)`,           // Y: CONVERTED
-      '',                                                                    // Z: ATTENDANCE
-      ''                                                                     // AA: INTERACTION
-    ];
+    const C  = config.SHEET_COLUMNS;
+    const CL = config.COLUMN_LETTERS;
+    const totalCols = C.INTERACTION + 1;  // 27 columns (0-26)
+    const rowData = new Array(totalCols).fill('');
+
+    rowData[C.CGILN]     = '=ROW()-1+230000';
+    rowData[C.DATE]      = date;
+    rowData[C.TIME]      = time;
+    rowData[C.NAME]      = name;
+    rowData[C.NUMBER]    = phone;
+    rowData[C.LOCATION]  = location;
+    rowData[C.PRODUCT]   = product;
+    rowData[C.MESSAGE]   = message;
+    rowData[C.SOURCE]    = source;
+    rowData[C.TEAM]      = team;
+    rowData[C.STATUS]    = status;
+    rowData[C.REMARK]    = remark;
+    rowData[C.DAY]       = `=IFERROR(WEEKDAY($${CL.DATE}${nextRow},2)&TEXT($${CL.DATE}${nextRow},"dddd"), "")`;
+    rowData[C.HOURS]     = `=IFERROR(HOUR($${CL.TIME}${nextRow}), "")`;
+    rowData[C.CONVERTED] = `=SWITCH(${CL.STATUS}${nextRow},"Admission Done",1,"Seat Booked",1,0)`;
 
     await api.spreadsheets.values.append({
       spreadsheetId: config.SPREADSHEET_ID,
@@ -154,11 +135,10 @@ async function upsertContact(leadData) {
 //  UPDATE CONTACT CELLS — targeted update on a known row
 //
 //  Use when you already know the row number and want to update
-//  specific fields. For example: community join sets status on
-//  a known row, form submission updates name + regiNo + status.
+//  specific fields. Keys are SHEET_COLUMNS indices (0-based).
 //
-//  @param {number} row   - Sheet row number
-//  @param {Object} fields - { status: 'X', team: 'Y', ... }
+//  @param {number} row    - Sheet row number
+//  @param {Object} fields - { [config.SHEET_COLUMNS.STATUS]: 'X', ... }
 // ═════════════════════════════════════════════════════════════
 async function updateContactCells(row, fields) {
   if (!row) throw new Error('updateContactCells: row is required');
@@ -166,29 +146,14 @@ async function updateContactCells(row, fields) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
-  // Map field names to Sheet column letters
-  const FIELD_TO_COL = {
-    name:      'D',
-    regiNo:    'F',
-    location:  'G',
-    product:   'H',
-    message:   'I',
-    source:    'J',
-    team:      'K',
-    status:    'L',
-    rating:    'M',
-    remark:    'O',
-    team_2:    'P',
-    status_2:  'Q',
-    remark_2:  'R',
-  };
-
   const updates = [];
-  for (const [field, value] of Object.entries(fields)) {
-    const col = FIELD_TO_COL[field];
-    if (col && value !== undefined) {
-      updates.push({ range: `${sheetName}!${col}${row}`, values: [[value]] });
-    }
+  for (const [colIdx, value] of Object.entries(fields)) {
+    if (value === undefined) continue;
+    const letter = config.colLetter(parseInt(colIdx));
+    updates.push({
+      range: `${sheetName}!${letter}${row}`,
+      values: [[value]]
+    });
   }
 
   if (updates.length > 0) {
@@ -198,59 +163,6 @@ async function updateContactCells(row, fields) {
     });
     console.log(`[Sheet] Updated ${updates.length} cell(s) on row ${row}`);
   }
-}
-
-
-// ═════════════════════════════════════════════════════════════
-//  UPDATE FORM DATA — WhatsApp flow form submission
-//  Sets name, regiNo (form_num), and status on the matching row.
-//  NO Firestore calls — handler does that separately.
-// ═════════════════════════════════════════════════════════════
-async function updateFormData(params, knownRow) {
-  const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
-
-  const waId    = params.wa_num || '';
-  const option  = params.option || '';
-  const formNum = params.form_num || '';
-  const name    = params.name || '';
-
-  if (!waId) throw new Error('wa_num is missing');
-
-  let targetRow = knownRow || null;
-
-  if (!targetRow) {
-    const response = await api.spreadsheets.values.get({
-      spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A2:Z`
-    });
-
-    const rows = response.data.values || [];
-    const matchingRowIndex = rows.findIndex(row =>
-      phoneNumbersMatch(row[config.SHEET_COLUMNS.NUMBER] || '', waId)
-    );
-
-    if (matchingRowIndex === -1) throw new Error('No match found');
-    targetRow = matchingRowIndex + 2;
-  }
-  const statusValue = option === "Offline (અમદાવાદ ક્લાસ માં)"
-    ? "Ahm MC Link Sent"
-    : "Online MC Link Sent";
-
-  await api.spreadsheets.values.batchUpdate({
-    spreadsheetId: config.SPREADSHEET_ID,
-    requestBody: {
-      valueInputOption: 'RAW',
-      data: [
-        { range: `${sheetName}!D${targetRow}`, values: [[name]] },
-        { range: `${sheetName}!F${targetRow}`, values: [[formNum]] },
-        { range: `${sheetName}!L${targetRow}`, values: [[statusValue]] }
-      ]
-    }
-  });
-
-  console.log(`[Sheet] Form data updated row ${targetRow}: name=${name}, regiNo=${formNum}, status=${statusValue}`);
-  return { row: targetRow, statusValue };
 }
 
 
@@ -361,7 +273,9 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
       current ? `${current} | ${formattedTime}` : `Present ${formattedTime}`;
 
     if (foundRow) {
-      const currentAttendance = fullRowData[11] || '';
+      // NOTE: These indices are for the OnlineAttendence sheet layout,
+      // NOT the DSR sheet. Do not use config.SHEET_COLUMNS here.
+      const currentAttendance = fullRowData[11] || '';  // OnlineAttendence column L
       const updatedAttendance = buildAttendance(currentAttendance);
 
       await api.spreadsheets.values.update({
@@ -421,7 +335,6 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
 module.exports = {
   upsertContact,
   updateContactCells,
-  updateFormData,
   findByPhone,
   checkFirebaseWhitelist,
   updateAttendance,

@@ -11,6 +11,7 @@ const FirestoreService = require('../services/firestoreService');
 const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const PendingQueue     = require('../services/pendingQueue');
+const config           = require('../config');
 
 
 async function handleFormSubmission(params) {
@@ -51,7 +52,12 @@ async function handleFormSubmission(params) {
         phone, name, source: 'WhatsApp',
         remark: `Form submitted: ${option}`, product: 'CGI',
       });
-      await SheetService.updateFormData(params, upsertResult.row);
+      const C = config.SHEET_COLUMNS;
+      await SheetService.updateContactCells(upsertResult.row, {
+        [C.NAME]:    name,
+        [C.REGI_NO]: formNum,
+        [C.STATUS]:  statusValue,
+      });
     } catch (e) { errors.push(`sheet: ${e.message}`); }
 
     if (errors.length) throw new Error(errors.join('; '));

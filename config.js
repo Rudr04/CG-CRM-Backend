@@ -60,13 +60,102 @@ const TIMEZONE = 'Asia/Kolkata';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SHEET COLUMN INDICES (0-based) — SINGLE SOURCE OF TRUTH
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SHEET_COLUMNS = {
+  CGILN: 0,
+  DATE: 1,
+  TIME: 2,
+  NAME: 3,
+  NUMBER: 4,
+  REGI_NO: 5,
+  LOCATION: 6,
+  PRODUCT: 7,
+  MESSAGE: 8,
+  SOURCE: 9,
+  TEAM: 10,
+  STATUS: 11,
+  RATING: 12,
+  CB_DATE: 13,
+  REMARK: 14,
+  TEAM_2: 15,
+  STATUS_2: 16,
+  REMARK_2: 17,
+  CONF_CB_PRIORITY: 18,
+  CONFIRMATION: 19,
+  JOIN_POLL: 20,
+  NO_WITHOUT_91: 21,
+  DAY: 22,
+  HOURS: 23,
+  CONVERTED: 24,
+  ATTENDANCE: 25,
+  INTERACTION: 26
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  COLUMN UTILITIES — derive everything from SHEET_COLUMNS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert 0-based column index to letter (0→A, 3→D, 25→Z, 26→AA)
+ */
+function colLetter(idx) {
+  let letter = '';
+  let n = idx;
+  while (n >= 0) {
+    letter = String.fromCharCode(65 + (n % 26)) + letter;
+    n = Math.floor(n / 26) - 1;
+  }
+  return letter;
+}
+
+// 0-based index → column letter, auto-generated from SHEET_COLUMNS
+const COLUMN_LETTERS = {};
+for (const [name, idx] of Object.entries(SHEET_COLUMNS)) {
+  COLUMN_LETTERS[name] = colLetter(idx);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TRACKED FIELDS — complete mapping for Sheet↔Firestore sync
+//  Keys are SHEET_COLUMNS indices. Single source for:
+//    - which columns trigger sync (GAS onEdit checks this)
+//    - GAS field name sent in payload
+//    - Firestore field name written to doc
+//    - history action logged in history[] array
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TRACKED_FIELDS = {
+  [SHEET_COLUMNS.NAME]:     { sheetField: 'name',     firestoreField: 'name',     historyAction: 'name_updated' },
+  [SHEET_COLUMNS.LOCATION]: { sheetField: 'location', firestoreField: 'location', historyAction: 'location_updated' },
+  [SHEET_COLUMNS.TEAM]:     { sheetField: 'team',     firestoreField: 'agent',    historyAction: 'claimed' },
+  [SHEET_COLUMNS.STATUS]:   { sheetField: 'status',   firestoreField: 'status',   historyAction: 'status_changed' },
+  [SHEET_COLUMNS.RATING]:   { sheetField: 'rating',   firestoreField: 'rating',   historyAction: 'rating_changed' },
+  [SHEET_COLUMNS.REMARK]:   { sheetField: 'remark',   firestoreField: 'remark',   historyAction: 'remark_added' },
+  [SHEET_COLUMNS.TEAM_2]:   { sheetField: 'team_2',   firestoreField: 'team2',    historyAction: 'team_2_changed' },
+  [SHEET_COLUMNS.STATUS_2]: { sheetField: 'status_2', firestoreField: 'status2',  historyAction: 'status_2_changed' },
+  [SHEET_COLUMNS.REMARK_2]: { sheetField: 'remark_2', firestoreField: 'remark2',  historyAction: 'remark_2_added' },
+};
+
+// Auto-generated lookup maps from TRACKED_FIELDS
+const SHEET_TO_FIRESTORE = {};
+const HISTORY_ACTIONS = {};
+
+for (const [colIdx, mapping] of Object.entries(TRACKED_FIELDS)) {
+  SHEET_TO_FIRESTORE[mapping.sheetField] = mapping.firestoreField;
+  HISTORY_ACTIONS[mapping.sheetField] = mapping.historyAction;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  EXPORTS
 // ═══════════════════════════════════════════════════════════════════════════
 
 module.exports = {
   // ─── Google Sheets ────────────────────────────────────────────────────────
   SPREADSHEET_ID: process.env.SPREADSHEET_ID,
-  
+
   SHEETS: {
     DSR: 'Sheet5',
     PAID: 'Paid_Users',
@@ -137,36 +226,15 @@ module.exports = {
     INTERESTED: 'EPXcDmp'
   },
 
-  // ─── Sheet Column Indices (0-based) ───────────────────────────────────────
-  SHEET_COLUMNS: {
-    CGILN: 0,
-    DATE: 1,
-    TIME: 2,
-    NAME: 3,
-    NUMBER: 4,
-    REGI_NO: 5,
-    LOCATION: 6,
-    PRODUCT: 7,
-    MESSAGE: 8,
-    SOURCE: 9,
-    TEAM: 10,
-    STATUS: 11,
-    RATING: 12,
-    CB_DATE: 13,
-    REMARK: 14,
-    TEAM_2: 15,
-    STATUS_2: 16,
-    REMARK_2: 17,
-    CONF_CB_PRIORITY: 18,
-    CONFIRMATION: 19,
-    JOIN_POLL: 20,
-    NO_WITHOUT_91: 21,
-    DAY: 22,
-    HOURS: 23,
-    CONVERTED: 24,
-    ATTENDANCE: 25,
-    INTERACTION: 26
-  },
+  // ─── Sheet Columns ─────────────────────────────────────────────────────────
+  SHEET_COLUMNS,         // 0-based indices: { NAME: 3, STATUS: 11, ... }
+  COLUMN_LETTERS,        // auto-generated: { NAME: 'D', STATUS: 'L', ... }
+  colLetter,             // utility: colLetter(3) → 'D'
+
+  // ─── Field Sync Mappings ────────────────────────────────────────────────────
+  TRACKED_FIELDS,        // full mapping: colIdx → { sheetField, firestoreField, historyAction }
+  SHEET_TO_FIRESTORE,    // auto-generated: { 'team': 'agent', 'status': 'status', ... }
+  HISTORY_ACTIONS,       // auto-generated: { 'team': 'claimed', 'status': 'status_changed', ... }
 
   // ─── Defaults ─────────────────────────────────────────────────────────────
   DEFAULTS: {

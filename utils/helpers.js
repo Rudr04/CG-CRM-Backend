@@ -240,13 +240,13 @@ function isFromAdvertisement(sourceUrl) {
 /**
  * Detect source from URL
  */
-function detectSource(sourceUrl) {
-  if (!sourceUrl) return 'WhatsApp';
+function deriveSource(params) {
+  const sourceUrl = params.sourceUrl || '';
+  if (params.source) return params.source;
   if (sourceUrl.includes('instagram.com')) return 'Insta';
   if (sourceUrl.includes('fb.me')) return 'FB';
   return 'WhatsApp';
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ROBO ASSIGNMENT
@@ -294,7 +294,7 @@ module.exports = {
   
   // Source
   isFromAdvertisement,
-  detectSource,
+  deriveSource,
   
   // Team
   shouldAssignRobo,

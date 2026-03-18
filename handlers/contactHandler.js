@@ -12,6 +12,7 @@ const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
 const PendingQueue     = require('../services/pendingQueue');
+const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
 
@@ -57,24 +58,6 @@ function tryWriteOrQueue(writeFn, operationId, metadata) {
     PendingQueue.enqueue(operationId, writeFn, metadata);
     console.error(`[Handler] Write failed, queued ${operationId}: ${err.message}`);
   });
-}
-
-
-// ─────────────────────────────────────────────────────────────
-//  HELPER
-// ─────────────────────────────────────────────────────────────
-function shouldAssignRobo(text) {
-  if (!text) return false;
-  const t = text.toLowerCase();
-  return t.includes('free masterclass') || t.includes('free mc');
-}
-
-function deriveSource(params) {
-  const sourceUrl = params.sourceUrl || '';
-  if (params.source) return params.source;
-  if (sourceUrl.includes('instagram.com')) return 'Insta';
-  if (sourceUrl.includes('fb.me')) return 'FB';
-  return 'WhatsApp';
 }
 
 
@@ -287,10 +270,8 @@ async function handleCommunityJoin(params) {
     currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || 'Not Assigned';
   }
 
-  const isOnline    = currentStatus.includes('Online');
-  const newStatus   = isOnline ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
+  const newStatus   = currentStatus.includes('Online') ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
   const assignRobo  = currentTeam === 'Not Assigned';
-  const newTeam     = assignRobo ? 'ROBO' : currentTeam;
 
   const fsUpdates = { status: newStatus };
   if (assignRobo) { fsUpdates.agent = 'ROBO'; fsUpdates.stage = 'ROBO'; }
@@ -298,14 +279,15 @@ async function handleCommunityJoin(params) {
   const customFirestore = async () => {
     await FirestoreService.updateLead(phone, fsUpdates, {
       action: 'community_joined', by: 'system',
-      details: { status: newStatus, groupType: isOnline ? 'online' : 'ahmedabad' }
+      details: { status: newStatus, groupType: currentStatus.includes('Online') ? 'online' : 'ahmedabad' }
     });
   };
 
   const customSheet = async () => {
     if (sheetRow) {
-      const cellUpdates = { status: newStatus };
-      if (assignRobo) cellUpdates.team = 'ROBO';
+      const C = config.SHEET_COLUMNS;
+      const cellUpdates = { [C.STATUS]: newStatus };
+      if (assignRobo) cellUpdates[C.TEAM] = 'ROBO';
       await SheetService.updateContactCells(sheetRow, cellUpdates);
     }
   };

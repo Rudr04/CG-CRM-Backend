@@ -10,23 +10,6 @@ const LOG_PREFIX = '[Sync]';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  FIELD MAPPING
-// ═══════════════════════════════════════════════════════════════════════════
-
-const FIELD_MAP = {
-  'name': 'name',
-  'location': 'location',
-  'team': 'agent',
-  'status': 'status',
-  'rating': 'rating',
-  'remark': 'remark',
-  'team_2': 'team2',
-  'status_2': 'status2',
-  'remark_2': 'remark2',
-};
-
-
-// ═══════════════════════════════════════════════════════════════════════════
 //  MAIN HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -84,7 +67,7 @@ async function processEdit(edit, editor) {
     return { success: false, reason: 'invalid_phone' };
   }
 
-  const firestoreField = FIELD_MAP[field];
+  const firestoreField = config.SHEET_TO_FIRESTORE[field];
   if (!firestoreField) {
     return { success: false, reason: 'unknown_field' };
   }
@@ -124,7 +107,7 @@ async function processEdit(edit, editor) {
 
   const historyEntry = {
     action: edit.action || 'field_updated',
-    by: field === 'team' && newValue && newValue !== config.STAGES.NOT_ASSIGNED ? newValue : editor,
+    by: field === editor,
     details: buildHistoryDetails(field, oldValue, newValue)
   };
 
