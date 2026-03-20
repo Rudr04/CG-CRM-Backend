@@ -12,7 +12,7 @@
 // ============================================================================
 
 const MAX_RETRIES = 5;
-const BACKOFF_MS = [0, 15000, 60000, 300000, 900000]; // 0s, 15s, 1m, 5m, 15m
+const BACKOFF_MS = [0, 10000, 30000, 60000, 120000]; // 0s, 15s, 1m, 5m, 15m
 const POLL_INTERVAL_MS = 10000; // check queue every 10s
 
 const queue = [];
