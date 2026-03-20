@@ -106,7 +106,7 @@ async function processEdit(edit, editor) {
 
   const historyEntry = {
     action: edit.action || 'field_updated',
-    by: field === editor,
+    by: editor,
     details: buildHistoryDetails(field, oldValue, newValue)
   };
 

@@ -1,4 +1,6 @@
 node_modules/
 .env
-service-account-key.json
+cg-unified-platform-firebase-adminsdk-fbsvc-e1bf30e425.json
 .git/
+package.json
+package-lock.json

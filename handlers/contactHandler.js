@@ -1,9 +1,9 @@
 // ============================================================================
 //  contactHandler.js — Lead Event Orchestrator
 //
-//  Every handler writes to BOTH Firestore and Sheet transactionally.
+//  Every handler writes to BOTH Firestore and Sheet.
 //  If either fails, the operation is queued for in-memory retry.
-//  Services are pure I/O — all orchestration lives here.
+//  writeBoth tracks what succeeded — retries only run the failed part.
 // ============================================================================
 
 const SheetService     = require('../services/sheetsService');
@@ -16,55 +16,12 @@ const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
 
-
-
-// ─────────────────────────────────────────────────────────────
-//  SHARED: Build a write function that writes to BOTH stores
-//  Both services use upsert/merge so this is idempotent and
-//  safe to retry.
-// ─────────────────────────────────────────────────────────────
-function buildWriteBoth(leadData, historyEntry, customFirestoreWrite, customSheetWrite) {
-  return async () => {
-    const errors = [];
-
-    try {
-      if (customFirestoreWrite) {
-        await customFirestoreWrite();
-      } else {
-        await FirestoreService.createOrUpdateLead(leadData, historyEntry);
-      }
-    } catch (e) {
-      errors.push(`firestore: ${e.message}`);
-    }
-
-    try {
-      if (customSheetWrite) {
-        await customSheetWrite();
-      } else {
-        await SheetService.upsertContact(leadData);
-      }
-    } catch (e) {
-      errors.push(`sheet: ${e.message}`);
-    }
-
-    if (errors.length > 0) {
-      throw new Error(errors.join('; '));
-    }
-  };
-}
-
-function tryWriteOrQueue(writeFn, operationId, metadata) {
-  return writeFn().catch(err => {
-    PendingQueue.enqueue(operationId, writeFn, metadata);
-    console.error(`[Handler] Write failed, queued ${operationId}: ${err.message}`);
-  });
-}
+// Shared write abstraction (was defined locally, now shared with formHandler)
+const { buildWriteBoth, tryWriteOrQueue } = require('../lib/writeBoth');
 
 
 // ═════════════════════════════════════════════════════════════
 //  HANDLE NEW CONTACT (WATI: newContactMessageReceived)
-//  FIXED: Now writes to BOTH Firestore AND Sheet.
-//  Previously only wrote Firestore — agents never saw it.
 // ═════════════════════════════════════════════════════════════
 async function handleNewContact(params) {
   try {
@@ -243,7 +200,6 @@ async function handleManualEntry(params) {
 
 // ═════════════════════════════════════════════════════════════
 //  HANDLE COMMUNITY JOIN (GRP_LINK_CLICK)
-//  Moved here from index.js → sheetsService.handleCommunityJoin()
 // ═════════════════════════════════════════════════════════════
 async function handleCommunityJoin(params) {
   const phone = params.wa_num || '';

@@ -6,9 +6,9 @@
 //  exponential backoff. After MAX_RETRIES → structured Cloud Logging
 //  entry (queryable for manual recovery).
 //
-//  Why in-memory: Firestore might be the thing that's down, so we
-//  can't store pending writes IN Firestore. Cloud Run keeps the
-//  instance warm between requests (especially with min-instances=1).
+//  FIXED: isProcessing guard prevents concurrent _processQueue runs.
+//  Without this, setInterval fires every 10s regardless of whether
+//  the previous run finished — causing runaway retries past MAX_RETRIES.
 // ============================================================================
 
 const MAX_RETRIES = 5;
@@ -17,6 +17,7 @@ const POLL_INTERVAL_MS = 10000; // check queue every 10s
 
 const queue = [];
 let intervalId = null;
+let isProcessing = false;
 
 
 /**
@@ -27,7 +28,6 @@ let intervalId = null;
  * @param {Object}   metadata     For logging: { phone, handler, trigger }
  */
 function enqueue(operationId, writeFn, metadata = {}) {
-  // Deduplicate: skip if same operationId already queued
   if (queue.find(item => item.operationId === operationId)) {
     console.log(`[PendingQueue] Already queued: ${operationId}`);
     return;
@@ -38,7 +38,7 @@ function enqueue(operationId, writeFn, metadata = {}) {
     writeFn,
     metadata,
     attempts: 0,
-    nextRetryAt: Date.now(),           // retry immediately on first pass
+    nextRetryAt: Date.now(),
     enqueuedAt: Date.now(),
   });
 
@@ -53,6 +53,7 @@ function enqueue(operationId, writeFn, metadata = {}) {
 function getStats() {
   return {
     pending: queue.length,
+    isProcessing,
     items: queue.map(item => ({
       operationId: item.operationId,
       attempts:    item.attempts,
@@ -71,48 +72,67 @@ function _ensureRunning() {
   console.log('[PendingQueue] Retry loop started');
 }
 
+
 async function _processQueue() {
+  if (isProcessing) return;
   if (queue.length === 0) return;
 
-  const now = Date.now();
+  isProcessing = true;
 
-  for (let i = queue.length - 1; i >= 0; i--) {
-    const item = queue[i];
-    if (item.nextRetryAt > now) continue;
+  try {
+    const now = Date.now();
+    const toRemove = [];
 
-    item.attempts++;
-    console.log(`[PendingQueue] Retry #${item.attempts}: ${item.operationId}`);
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
 
-    try {
-      await item.writeFn();
+      if (item.nextRetryAt > now) continue;
 
-      // ✅ Success — remove from queue
-      queue.splice(i, 1);
-      console.log(`[PendingQueue] ✅ Resolved: ${item.operationId} after ${item.attempts} attempt(s)`);
-
-    } catch (err) {
       if (item.attempts >= MAX_RETRIES) {
-        // ☠️ Dead letter — structured log for manual recovery
         console.error(JSON.stringify({
           type:        'DEAD_LETTER',
           severity:    'CRITICAL',
           operationId: item.operationId,
           attempts:    item.attempts,
-          lastError:   err.message,
+          lastError:   'max_retries_exceeded',
           metadata:    item.metadata,
           enqueuedAt:  new Date(item.enqueuedAt).toISOString(),
           diedAt:      new Date().toISOString(),
         }));
-        queue.splice(i, 1);
-      } else {
-        // Schedule next retry with exponential backoff
+        toRemove.push(i);
+        continue;
+      }
+
+      item.attempts++;
+      console.log(`[PendingQueue] Retry #${item.attempts}: ${item.operationId}`);
+
+      try {
+        await item.writeFn();
+
+        toRemove.push(i);
+        console.log(`[PendingQueue] ✅ Resolved: ${item.operationId} after ${item.attempts} attempt(s)`);
+
+      } catch (err) {
         const backoff = BACKOFF_MS[item.attempts] || BACKOFF_MS[BACKOFF_MS.length - 1];
-        item.nextRetryAt = now + backoff;
+        item.nextRetryAt = Date.now() + backoff;
         console.warn(
           `[PendingQueue] ❌ #${item.attempts} failed: ${item.operationId} — ${err.message}. Next in ${backoff / 1000}s`
         );
       }
     }
+
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      queue.splice(toRemove[i], 1);
+    }
+
+    if (queue.length === 0 && intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+      console.log('[PendingQueue] Queue empty — retry loop stopped');
+    }
+
+  } finally {
+    isProcessing = false;
   }
 }
 
