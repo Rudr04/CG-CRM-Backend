@@ -1,32 +1,16 @@
 // ============================================================================
 //  pendingQueue.js — In-Memory Retry Queue for Failed Writes
-//
-//  When a transactional write (Firestore + Sheet) fails, the handler
-//  enqueues the complete write function here. The queue retries with
-//  exponential backoff. After MAX_RETRIES → structured Cloud Logging
-//  entry (queryable for manual recovery).
-//
-//  FIXED: isProcessing guard prevents concurrent _processQueue runs.
-//  Without this, setInterval fires every 10s regardless of whether
-//  the previous run finished — causing runaway retries past MAX_RETRIES.
 // ============================================================================
 
 const MAX_RETRIES = 5;
-const BACKOFF_MS = [0, 10000, 30000, 60000, 120000]; // 0s, 15s, 1m, 5m, 15m
-const POLL_INTERVAL_MS = 10000; // check queue every 10s
+const BACKOFF_MS = [0, 10000, 30000, 60000, 120000];
+const POLL_INTERVAL_MS = 10000;
 
 const queue = [];
 let intervalId = null;
 let isProcessing = false;
 
 
-/**
- * Enqueue a failed write for background retry.
- *
- * @param {string}   operationId  Unique key, e.g. `create_9876543210_1709123456`
- * @param {Function} writeFn      Async fn that performs BOTH writes. Must be idempotent. Throws on failure.
- * @param {Object}   metadata     For logging: { phone, handler, trigger }
- */
 function enqueue(operationId, writeFn, metadata = {}) {
   if (queue.find(item => item.operationId === operationId)) {
     console.log(`[PendingQueue] Already queued: ${operationId}`);
@@ -47,9 +31,6 @@ function enqueue(operationId, writeFn, metadata = {}) {
 }
 
 
-/**
- * Get queue stats — exposed via /diagnostic endpoint.
- */
 function getStats() {
   return {
     pending: queue.length,
@@ -63,8 +44,6 @@ function getStats() {
   };
 }
 
-
-// ── Internal ──────────────────────────────────────────────────
 
 function _ensureRunning() {
   if (intervalId) return;
@@ -88,21 +67,6 @@ async function _processQueue() {
 
       if (item.nextRetryAt > now) continue;
 
-      if (item.attempts >= MAX_RETRIES) {
-        console.error(JSON.stringify({
-          type:        'DEAD_LETTER',
-          severity:    'CRITICAL',
-          operationId: item.operationId,
-          attempts:    item.attempts,
-          lastError:   'max_retries_exceeded',
-          metadata:    item.metadata,
-          enqueuedAt:  new Date(item.enqueuedAt).toISOString(),
-          diedAt:      new Date().toISOString(),
-        }));
-        toRemove.push(i);
-        continue;
-      }
-
       item.attempts++;
       console.log(`[PendingQueue] Retry #${item.attempts}: ${item.operationId}`);
 
@@ -113,11 +77,26 @@ async function _processQueue() {
         console.log(`[PendingQueue] ✅ Resolved: ${item.operationId} after ${item.attempts} attempt(s)`);
 
       } catch (err) {
-        const backoff = BACKOFF_MS[item.attempts] || BACKOFF_MS[BACKOFF_MS.length - 1];
-        item.nextRetryAt = Date.now() + backoff;
-        console.warn(
-          `[PendingQueue] ❌ #${item.attempts} failed: ${item.operationId} — ${err.message}. Next in ${backoff / 1000}s`
-        );
+        // Check if this was the LAST attempt — dead letter IMMEDIATELY
+        if (item.attempts >= MAX_RETRIES) {
+          console.error(JSON.stringify({
+            type:        'DEAD_LETTER',
+            severity:    'CRITICAL',
+            operationId: item.operationId,
+            attempts:    item.attempts,
+            lastError:   err.message,
+            metadata:    item.metadata,
+            enqueuedAt:  new Date(item.enqueuedAt).toISOString(),
+            diedAt:      new Date().toISOString(),
+          }));
+          toRemove.push(i);
+        } else {
+          const backoff = BACKOFF_MS[item.attempts] || BACKOFF_MS[BACKOFF_MS.length - 1];
+          item.nextRetryAt = Date.now() + backoff;
+          console.warn(
+            `[PendingQueue] ❌ #${item.attempts} failed: ${item.operationId} — ${err.message}. Next in ${backoff / 1000}s`
+          );
+        }
       }
     }
 
