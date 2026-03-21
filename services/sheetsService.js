@@ -71,14 +71,14 @@ async function upsertContact(leadData) {
     // Append inquiry and product (never overwrite — use | separator)
     if (leadData.inquiry) {
       const currentInquiry = existing.data[C.INQUIRY] || '';
-      if (!currentInquiry.split(' | ').includes(leadData.inquiry)) {
-        cellUpdates[C.INQUIRY] = currentInquiry ? `${currentInquiry} | ${leadData.inquiry}` : leadData.inquiry;
+      if (!currentInquiry.split(', ').includes(leadData.inquiry)) {
+        cellUpdates[C.INQUIRY] = currentInquiry ? `${currentInquiry}, ${leadData.inquiry}` : leadData.inquiry;
       }
     }
     if (leadData.product) {
       const currentProduct = existing.data[C.PRODUCT] || '';
-      if (!currentProduct.split(' | ').includes(leadData.product)) {
-        cellUpdates[C.PRODUCT] = currentProduct ? `${currentProduct} | ${leadData.product}` : leadData.product;
+      if (!currentProduct.split(', ').includes(leadData.product)) {
+        cellUpdates[C.PRODUCT] = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
       }
     }
 

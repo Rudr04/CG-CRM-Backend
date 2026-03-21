@@ -115,7 +115,7 @@ const TRACKED_FIELDS = {
   [SHEET_COLUMNS.NAME]:           { sheetField: 'name',           firestoreField: 'name',          historyAction: 'name_updated' },
   [SHEET_COLUMNS.LOCATION]:       { sheetField: 'location',       firestoreField: 'location',      historyAction: 'location_updated' },
   [SHEET_COLUMNS.INQUIRY]:        { sheetField: 'inquiry',        firestoreField: 'inquiry',       historyAction: 'inquiry_changed' },
-  [SHEET_COLUMNS.PRODUCT]:        { sheetField: 'product',        firestoreField: 'product',       historyAction: 'product_changed' },
+  [SHEET_COLUMNS.PRODUCT]:        { sheetField: 'product',        firestoreField: 'product',       historyAction: 'product_added' },
   [SHEET_COLUMNS.TEAM]:           { sheetField: 'team',           firestoreField: 'agent',         historyAction: 'claimed' },
   [SHEET_COLUMNS.STATUS]:         { sheetField: 'status',         firestoreField: 'status',        historyAction: 'status_changed' },
   [SHEET_COLUMNS.RATING]:         { sheetField: 'rating',         firestoreField: 'rating',        historyAction: 'rating_changed' },
