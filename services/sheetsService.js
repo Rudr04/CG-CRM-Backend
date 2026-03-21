@@ -68,6 +68,20 @@ async function upsertContact(leadData) {
     if (leadData.location && !existing.data[C.LOCATION]) cellUpdates[C.LOCATION] = leadData.location;
     if (leadData.source && !existing.data[C.SOURCE])     cellUpdates[C.SOURCE] = leadData.source;
 
+    // Append inquiry and product (never overwrite — use | separator)
+    if (leadData.inquiry) {
+      const currentInquiry = existing.data[C.INQUIRY] || '';
+      if (!currentInquiry.split(' | ').includes(leadData.inquiry)) {
+        cellUpdates[C.INQUIRY] = currentInquiry ? `${currentInquiry} | ${leadData.inquiry}` : leadData.inquiry;
+      }
+    }
+    if (leadData.product) {
+      const currentProduct = existing.data[C.PRODUCT] || '';
+      if (!currentProduct.split(' | ').includes(leadData.product)) {
+        cellUpdates[C.PRODUCT] = currentProduct ? `${currentProduct} | ${leadData.product}` : leadData.product;
+      }
+    }
+
     if (Object.keys(cellUpdates).length > 0) {
       await updateContactCells(existing.row, cellUpdates);
     }
@@ -90,7 +104,8 @@ async function upsertContact(leadData) {
 
     const name     = leadData.name || leadData.senderName || '';
     const location = leadData.location || '';
-    const product  = leadData.product || 'CGI';
+    const inquiry  = leadData.inquiry || 'CGI';
+    const product  = leadData.product || '';
     const source   = leadData.source || '';
     const team     = leadData.team || leadData.agent || 'Not Assigned';
     const message  = leadData.message || '';
@@ -99,15 +114,16 @@ async function upsertContact(leadData) {
 
     const C  = config.SHEET_COLUMNS;
     const CL = config.COLUMN_LETTERS;
-    const totalCols = C.INTERACTION + 1;  // 27 columns (0-26)
+    const totalCols = C.PIPELINE_STAGE + 1;  // 19 columns (0-18)
     const rowData = new Array(totalCols).fill('');
 
-    rowData[C.CGILN]     = '=ROW()-1+230000';
+    rowData[C.CGID]      = '=ROW()-1+230000';
     rowData[C.DATE]      = date;
     rowData[C.TIME]      = time;
     rowData[C.NAME]      = name;
     rowData[C.NUMBER]    = phone;
     rowData[C.LOCATION]  = location;
+    rowData[C.INQUIRY]   = inquiry;
     rowData[C.PRODUCT]   = product;
     rowData[C.MESSAGE]   = message;
     rowData[C.SOURCE]    = source;
@@ -120,7 +136,7 @@ async function upsertContact(leadData) {
 
     await api.spreadsheets.values.append({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A:Z`,
+      range: `${sheetName}!A:S`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] }
     });
@@ -179,7 +195,7 @@ async function findByPhone(phoneNumber) {
 
   const response = await api.spreadsheets.values.get({
     spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:Z`
+    range: `${sheetName}!A2:S`
   });
 
   const rows = response.data.values || [];

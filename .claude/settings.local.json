@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\" -name \"*nquiry*\" -type f)"
+    ]
+  }
+}

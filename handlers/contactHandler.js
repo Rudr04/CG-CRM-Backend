@@ -37,7 +37,7 @@ async function handleNewContact(params) {
     // Transactional write: Firestore + Sheet
     const leadData = {
       phone, name, source: 'WhatsApp', status: 'Lead',
-      team: 'Not Assigned', product: 'CGI', channel: 'wati_new_contact',
+      team: 'Not Assigned', inquiry: 'CGI', channel: 'wati_new_contact',
     };
 
     const writeFn = buildWriteBoth(leadData, {
@@ -70,7 +70,7 @@ async function handleInterestedUser(params) {
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
     message: params.text || params.msg || '', team: 'Not Assigned',
-    product: 'CGI', channel: 'interested_reply',
+    inquiry: 'CGI', channel: 'interested_reply',
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -95,7 +95,7 @@ async function handleAdvertisementContact(params) {
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: text, team, product: 'CGI', channel: 'advertisement',
+    message: text, team, inquiry: 'CGI', channel: 'advertisement',
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -120,7 +120,7 @@ async function handleWebForm(params) {
 
     const leadData = {
       phone, name: params.name || '', location: params.state || '',
-      source: 'CGI Web Form', product: 'CGI', team: 'Not Assigned',
+      source: 'CGI Web Form', inquiry: 'CGI', team: 'Not Assigned',
       channel: 'web_form',
     };
 
@@ -151,7 +151,7 @@ async function handleKeywordContact(params) {
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: `Keyword: ${text}`, team, product: 'CGI',
+    message: `Keyword: ${text}`, team, inquiry: 'CGI',
     channel: 'keyword_message',
   };
 
@@ -177,7 +177,8 @@ async function handleManualEntry(params) {
 
     const leadData = {
       phone, name: params.senderName || '', location: params.location || '',
-      product: params.product || 'CGI', source: params.source || 'Manual Entry',
+      inquiry: params.inquiry || 'CGI', product: params.product || '',
+      source: params.source || 'Manual Entry',
       team: params.team || 'Not Assigned', remark: params.remark || '',
       channel: 'manual_entry',
     };

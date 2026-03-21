@@ -61,36 +61,21 @@ const TIMEZONE = 'Asia/Kolkata';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  SHEET COLUMN INDICES (0-based) — SINGLE SOURCE OF TRUTH
+//
+//  A  CGID        H  PRODUCT     O  REMARK
+//  B  DATE        I  MESSAGE     P  DAY
+//  C  TIME        J  SOURCE      Q  HOURS
+//  D  NAME        K  TEAM        R  CONVERTED
+//  E  NUMBER      L  STATUS      S  PIPELINE_STAGE
+//  F  LOCATION    M  RATING
+//  G  INQUIRY     N  CB_DATE
 // ═══════════════════════════════════════════════════════════════════════════
 
 const SHEET_COLUMNS = {
-  CGILN: 0,
-  DATE: 1,
-  TIME: 2,
-  NAME: 3,
-  NUMBER: 4,
-  REGI_NO: 5,
-  LOCATION: 6,
-  PRODUCT: 7,
-  MESSAGE: 8,
-  SOURCE: 9,
-  TEAM: 10,
-  STATUS: 11,
-  RATING: 12,
-  CB_DATE: 13,
-  REMARK: 14,
-  TEAM_2: 15,
-  STATUS_2: 16,
-  REMARK_2: 17,
-  CONF_CB_PRIORITY: 18,
-  CONFIRMATION: 19,
-  JOIN_POLL: 20,
-  NO_WITHOUT_91: 21,
-  DAY: 22,
-  HOURS: 23,
-  CONVERTED: 24,
-  ATTENDANCE: 25,
-  INTERACTION: 26
+  CGID: 0, DATE: 1, TIME: 2, NAME: 3, NUMBER: 4, LOCATION: 5,
+  INQUIRY: 6, PRODUCT: 7, MESSAGE: 8, SOURCE: 9, TEAM: 10,
+  STATUS: 11, RATING: 12, CB_DATE: 13, REMARK: 14, DAY: 15,
+  HOURS: 16, CONVERTED: 17, PIPELINE_STAGE: 18,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -127,15 +112,15 @@ for (const [name, idx] of Object.entries(SHEET_COLUMNS)) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TRACKED_FIELDS = {
-  [SHEET_COLUMNS.NAME]:     { sheetField: 'name',     firestoreField: 'name',     historyAction: 'name_updated' },
-  [SHEET_COLUMNS.LOCATION]: { sheetField: 'location', firestoreField: 'location', historyAction: 'location_updated' },
-  [SHEET_COLUMNS.TEAM]:     { sheetField: 'team',     firestoreField: 'agent',    historyAction: 'claimed' },
-  [SHEET_COLUMNS.STATUS]:   { sheetField: 'status',   firestoreField: 'status',   historyAction: 'status_changed' },
-  [SHEET_COLUMNS.RATING]:   { sheetField: 'rating',   firestoreField: 'rating',   historyAction: 'rating_changed' },
-  [SHEET_COLUMNS.REMARK]:   { sheetField: 'remark',   firestoreField: 'remark',   historyAction: 'remark_added' },
-  [SHEET_COLUMNS.TEAM_2]:   { sheetField: 'team_2',   firestoreField: 'team2',    historyAction: 'team_2_changed' },
-  [SHEET_COLUMNS.STATUS_2]: { sheetField: 'status_2', firestoreField: 'status2',  historyAction: 'status_2_changed' },
-  [SHEET_COLUMNS.REMARK_2]: { sheetField: 'remark_2', firestoreField: 'remark2',  historyAction: 'remark_2_added' },
+  [SHEET_COLUMNS.NAME]:           { sheetField: 'name',           firestoreField: 'name',          historyAction: 'name_updated' },
+  [SHEET_COLUMNS.LOCATION]:       { sheetField: 'location',       firestoreField: 'location',      historyAction: 'location_updated' },
+  [SHEET_COLUMNS.INQUIRY]:        { sheetField: 'inquiry',        firestoreField: 'inquiry',       historyAction: 'inquiry_changed' },
+  [SHEET_COLUMNS.PRODUCT]:        { sheetField: 'product',        firestoreField: 'product',       historyAction: 'product_changed' },
+  [SHEET_COLUMNS.TEAM]:           { sheetField: 'team',           firestoreField: 'agent',         historyAction: 'claimed' },
+  [SHEET_COLUMNS.STATUS]:         { sheetField: 'status',         firestoreField: 'status',        historyAction: 'status_changed' },
+  [SHEET_COLUMNS.RATING]:         { sheetField: 'rating',         firestoreField: 'rating',        historyAction: 'rating_changed' },
+  [SHEET_COLUMNS.REMARK]:         { sheetField: 'remark',         firestoreField: 'remark',        historyAction: 'remark_added' },
+  [SHEET_COLUMNS.PIPELINE_STAGE]: { sheetField: 'pipeline_stage', firestoreField: 'pipelineStage', historyAction: 'stage_changed' },
 };
 
 // Auto-generated lookup maps from TRACKED_FIELDS
@@ -240,5 +225,6 @@ module.exports = {
   DEFAULTS: {
     STATUS: 'Lead',
     TEAM: 'Not Assigned',
+    INQUIRY: 'CGI',
   }
 };

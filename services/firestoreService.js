@@ -167,7 +167,9 @@ async function createLead(leadData) {
     status: leadData.status || config.DEFAULTS.STATUS,
     agent: leadData.team || config.STAGES.NOT_ASSIGNED,
     location: cleanString(leadData.location),
-    product: leadData.product || config.DEFAULTS.PRODUCT,
+    inquiry: leadData.inquiry || config.DEFAULTS.INQUIRY || 'CGI',
+    product: cleanString(leadData.product),
+    pipelineStage: leadData.pipelineStage || '',
     source: cleanString(leadData.source),
     message: cleanString(leadData.message),
     remark: cleanString(leadData.remark),
@@ -250,6 +252,19 @@ async function createOrUpdateLead(leadData, historyEntry) {
       const current = existing.data.remark || '';
       updates.remark = current ? `${current} | ${leadData.remark}` : leadData.remark;
     }
+    if (leadData.inquiry) {
+      const currentInquiry = existing.data.inquiry || '';
+      if (!currentInquiry.split(' | ').includes(leadData.inquiry)) {
+        updates.inquiry = currentInquiry ? `${currentInquiry} | ${leadData.inquiry}` : leadData.inquiry;
+      }
+    }
+    if (leadData.product) {
+      const currentProduct = existing.data.product || '';
+      if (!currentProduct.split(' | ').includes(leadData.product)) {
+        updates.product = currentProduct ? `${currentProduct} | ${leadData.product}` : leadData.product;
+      }
+    }
+    if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;
     return await updateLead(phone, updates, historyEntry || {
       action: 'contact_updated', by: 'system', details: { source: leadData.source || '' }
     });

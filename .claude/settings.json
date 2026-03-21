@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\\\\src\")"
+    ]
+  }
+}

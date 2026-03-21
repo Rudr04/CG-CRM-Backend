@@ -40,7 +40,7 @@ async function handleFormSubmission(params) {
     // Firestore lead record
     try {
       await FirestoreService.createOrUpdateLead({
-        phone, name, regiNo: formNum, status: statusValue,
+        phone, name, regiNo: formNum, status: statusValue, inquiry: 'CGI',
       }, {
         action: 'form_submitted', by: 'system',
         details: { formNum, option, statusValue }
@@ -54,12 +54,11 @@ async function handleFormSubmission(params) {
   const customSheetWrite = async () => {
     const upsertResult = await SheetService.upsertContact({
       phone, name, source: 'WhatsApp',
-      remark: `Form submitted: ${option}`, product: 'CGI',
+      remark: `Form submitted: ${option}`, inquiry: 'CGI',
     });
     const C = config.SHEET_COLUMNS;
     await SheetService.updateContactCells(upsertResult.row, {
       [C.NAME]:    name,
-      [C.REGI_NO]: formNum,
       [C.STATUS]:  statusValue,
     });
   };

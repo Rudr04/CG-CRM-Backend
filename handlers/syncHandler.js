@@ -84,6 +84,7 @@ async function processEdit(edit, editor) {
       status: rowData.status || config.DEFAULTS.STATUS,
       team: rowData.team || config.STAGES.NOT_ASSIGNED,
       location: rowData.location || '',
+      inquiry: rowData.inquiry || 'CGI',
       product: rowData.product || '',
       source: 'sheet_backfill',
       channel: 'sheet_sync',
@@ -121,12 +122,12 @@ async function processEdit(edit, editor) {
 function buildHistoryDetails(field, oldValue, newValue) {
   const details = {};
   
-  if (['team', 'status', 'status_2'].includes(field)) {
+  if (['team', 'status'].includes(field)) {
     details.from = oldValue || '';
     details.to = newValue || '';
   } else if (field === 'rating') {
     details.rating = newValue || '';
-  } else if (['remark', 'remark_2'].includes(field)) {
+  } else if (field === 'remark') {
     details.text = (newValue || '').substring(0, 200);
   } else if (field === 'name') {
     details.oldName = oldValue || '';
