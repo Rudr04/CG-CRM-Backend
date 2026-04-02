@@ -161,7 +161,7 @@ async function createLead(leadData) {
     localNumber: countryInfo.localNumber,
     name: cleanString(leadData.name || leadData.senderName),
     email: cleanString(leadData.email),
-    stage: (!leadData.team || leadData.team === config.STAGES.NOT_ASSIGNED)
+    stage: (!leadData.team || leadData.team === config.DEFAULTS.TEAM)
       ? config.STAGES.NOT_ASSIGNED
       : config.STAGES.AGENT_WORKING,
     status: leadData.status || config.DEFAULTS.STATUS,
@@ -254,14 +254,14 @@ async function createOrUpdateLead(leadData, historyEntry) {
     }
     if (leadData.inquiry) {
       const currentInquiry = existing.data.inquiry || '';
-      if (!currentInquiry.split(' , ').includes(leadData.inquiry)) {
-        updates.inquiry = currentInquiry ? `${currentInquiry} , ${leadData.inquiry}` : leadData.inquiry;
+      if (!currentInquiry.split(', ').includes(leadData.inquiry)) {
+        updates.inquiry = currentInquiry ? `${currentInquiry}, ${leadData.inquiry}` : leadData.inquiry;
       }
     }
     if (leadData.product) {
       const currentProduct = existing.data.product || '';
-      if (!currentProduct.split(' , ').includes(leadData.product)) {
-        updates.product = currentProduct ? `${currentProduct} , ${leadData.product}` : leadData.product;
+      if (!currentProduct.split(', ').includes(leadData.product)) {
+        updates.product = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
       }
     }
     if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;

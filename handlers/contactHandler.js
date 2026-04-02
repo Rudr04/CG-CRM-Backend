@@ -176,10 +176,13 @@ async function handleManualEntry(params) {
     const phone = validatePhoneNumber(params.waId, { source: 'handleManualEntry' });
 
     const leadData = {
-      phone, name: params.senderName || '', location: params.location || '',
-      inquiry: params.inquiry || 'CGI', product: params.product || '',
+      phone, name: params.senderName || '',
+      location: params.location || '',
+      inquiry: config.DEFAULTS.INQUIRY,
+      product: params.product || '',
       source: params.source || 'Manual Entry',
-      team: params.team || config.DEFAULTS.TEAM, remark: params.remark || '',
+      team: params.team || config.DEFAULTS.TEAM,
+      remark: params.remark || '',
       channel: 'manual_entry',
     };
 

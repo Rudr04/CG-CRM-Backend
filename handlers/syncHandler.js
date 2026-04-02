@@ -82,7 +82,7 @@ async function processEdit(edit, editor) {
       phone,
       name: rowData.name || '',
       status: rowData.status || config.DEFAULTS.STATUS,
-      team: rowData.team || config.STAGES.NOT_ASSIGNED,
+      team: rowData.team || config.DEFAULTS.TEAM,
       location: rowData.location || '',
       inquiry: rowData.inquiry || config.DEFAULTS.INQUIRY,
       product: rowData.product || '',
@@ -100,8 +100,8 @@ async function processEdit(edit, editor) {
   const updates = { [firestoreField]: newValue || '', sheetRow: row };
 
   if (field === 'team') {
-    const isNotAssigned = !newValue || newValue === config.STAGES.NOT_ASSIGNED;
-    updates.agent = newValue || config.STAGES.NOT_ASSIGNED;
+    const isNotAssigned = !newValue || newValue === config.DEFAULTS.TEAM;
+    updates.agent = newValue || config.DEFAULTS.TEAM;
     updates.stage = isNotAssigned ? config.STAGES.NOT_ASSIGNED : config.STAGES.AGENT_WORKING;
   }
 
