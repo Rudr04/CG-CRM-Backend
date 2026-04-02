@@ -36,8 +36,8 @@ async function handleNewContact(params) {
 
     // Transactional write: Firestore + Sheet
     const leadData = {
-      phone, name, source: 'WhatsApp', status: 'Lead',
-      team: 'Not Assigned', inquiry: 'CGI', channel: 'wati_new_contact',
+      phone, name, source: 'WhatsApp', status: config.DEFAULTS.STATUS,
+      team: config.DEFAULTS.TEAM, inquiry: config.DEFAULTS.INQUIRY, channel: 'wati_new_contact',
     };
 
     const writeFn = buildWriteBoth(leadData, {
@@ -69,8 +69,8 @@ async function handleInterestedUser(params) {
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: params.text || params.msg || '', team: 'Not Assigned',
-    inquiry: 'CGI', channel: 'interested_reply',
+    message: params.text || params.msg || '', team: config.DEFAULTS.TEAM,
+    inquiry: config.DEFAULTS.INQUIRY, channel: 'interested_reply',
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -91,11 +91,11 @@ async function handleAdvertisementContact(params) {
   console.log('Contact from advertise');
   const phone = validatePhoneNumber(params.waId, { source: 'handleAdvertisementContact' });
   const text = params.text || '';
-  const team = shouldAssignRobo(text) ? 'ROBO' : 'Not Assigned';
+  const team = shouldAssignRobo(text) ? config.DEFAULTS.ROBO_AGENT : config.DEFAULTS.TEAM;
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: text, team, inquiry: 'CGI', channel: 'advertisement',
+    message: text, team, inquiry: config.DEFAULTS.INQUIRY, channel: 'advertisement',
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -120,7 +120,7 @@ async function handleWebForm(params) {
 
     const leadData = {
       phone, name: params.name || '', location: params.state || '',
-      source: 'CGI Web Form', inquiry: 'CGI', team: 'Not Assigned',
+      source: 'CGI Web Form', inquiry: config.DEFAULTS.INQUIRY, team: config.DEFAULTS.TEAM,
       channel: 'web_form',
     };
 
@@ -147,11 +147,11 @@ async function handleKeywordContact(params) {
   console.log('Contact from keyword message');
   const phone = validatePhoneNumber(params.waId, { source: 'handleKeywordContact' });
   const text = params.text || '';
-  const team = shouldAssignRobo(text) ? 'ROBO' : 'Not Assigned';
+  const team = shouldAssignRobo(text) ? config.DEFAULTS.ROBO_AGENT : config.DEFAULTS.TEAM;
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: `Keyword: ${text}`, team, inquiry: 'CGI',
+    message: `Keyword: ${text}`, team, inquiry: config.DEFAULTS.INQUIRY,
     channel: 'keyword_message',
   };
 
@@ -179,7 +179,7 @@ async function handleManualEntry(params) {
       phone, name: params.senderName || '', location: params.location || '',
       inquiry: params.inquiry || 'CGI', product: params.product || '',
       source: params.source || 'Manual Entry',
-      team: params.team || 'Not Assigned', remark: params.remark || '',
+      team: params.team || config.DEFAULTS.TEAM, remark: params.remark || '',
       channel: 'manual_entry',
     };
 
@@ -233,11 +233,11 @@ async function handleCommunityJoin(params) {
     currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || config.DEFAULTS.TEAM;
   }
 
-  const newStatus   = currentStatus.includes('Online') ? 'Online MC GrpJoined' : 'Ahm MC GrpJoined';
-  const assignRobo  = currentTeam === 'Not Assigned';
+  const newStatus   = currentStatus.includes('Online') ? config.FORM_OPTIONS.ONLINE_GROUP_JOINED : config.FORM_OPTIONS.OFFLINE_GROUP_JOINED;
+  const assignRobo  = currentTeam === config.DEFAULTS.TEAM;
 
   const fsUpdates = { status: newStatus };
-  if (assignRobo) { fsUpdates.agent = 'ROBO'; fsUpdates.stage = 'ROBO'; }
+  if (assignRobo) { fsUpdates.agent = config.DEFAULTS.ROBO_AGENT; fsUpdates.stage = config.DEFAULTS.ROBO_AGENT; }
 
   const customFirestore = async () => {
     await FirestoreService.updateLead(phone, fsUpdates, {
@@ -250,7 +250,7 @@ async function handleCommunityJoin(params) {
     if (sheetRow) {
       const C = config.SHEET_COLUMNS;
       const cellUpdates = { [C.STATUS]: newStatus };
-      if (assignRobo) cellUpdates[C.TEAM] = 'ROBO';
+      if (assignRobo) cellUpdates[C.TEAM] = config.DEFAULTS.ROBO_AGENT;
       await SheetService.updateContactCells(sheetRow, cellUpdates);
     }
   };

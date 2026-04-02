@@ -104,20 +104,20 @@ async function upsertContact(leadData) {
 
     const name     = leadData.name || leadData.senderName || '';
     const location = leadData.location || '';
-    const inquiry  = leadData.inquiry || 'CGI';
+    const inquiry  = leadData.inquiry || config.DEFAULTS.INQUIRY;
     const product  = leadData.product || '';
     const source   = leadData.source || '';
-    const team     = leadData.team || leadData.agent || 'Not Assigned';
+    const team     = leadData.team || leadData.agent || config.DEFAULTS.TEAM;
     const message  = leadData.message || '';
     const remark   = leadData.remark || '';
-    const status   = leadData.status || 'Lead';
+    const status   = leadData.status || config.DEFAULTS.STATUS;
 
     const C  = config.SHEET_COLUMNS;
     const CL = config.COLUMN_LETTERS;
     const totalCols = C.PIPELINE_STAGE + 1;  // 19 columns (0-18)
     const rowData = new Array(totalCols).fill('');
 
-    rowData[C.CGID]      = '=ROW()-1+230000';
+    rowData[C.CGID]      = `=ROW()-1+${config.DEFAULTS.SERIAL_OFFSET}`;
     rowData[C.DATE]      = date;
     rowData[C.TIME]      = time;
     rowData[C.NAME]      = name;
@@ -132,7 +132,8 @@ async function upsertContact(leadData) {
     rowData[C.REMARK]    = remark;
     rowData[C.DAY]       = `=IFERROR(WEEKDAY($${CL.DATE}${nextRow},2)&TEXT($${CL.DATE}${nextRow},"dddd"), "")`;
     rowData[C.HOURS]     = `=IFERROR(HOUR($${CL.TIME}${nextRow}), "")`;
-    rowData[C.CONVERTED] = `=SWITCH(${CL.STATUS}${nextRow},"Admission Done",1,"Seat Booked",1,0)`;
+    const switchCases = config.CONVERTED_STATUSES.map(s => `"${s}",1`).join(',');
+    rowData[C.CONVERTED] = `=SWITCH(${CL.STATUS}${nextRow},${switchCases},0)`;
 
     await api.spreadsheets.values.append({
       spreadsheetId: config.SPREADSHEET_ID,

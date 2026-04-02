@@ -154,6 +154,11 @@ module.exports = {
     BEARER_TOKEN: process.env.WATI_BEARER_TOKEN,
     BASE_URL: process.env.WATI_BASE_URL,
     ...WHATSAPP,
+    FORM_PARAMS: {
+      NAME:   'mc_regi_form_23_screen_0_textinput_0',
+      PHONE:  'mc_regi_form_23_screen_0_textinput_1',
+      OPTION: 'mc_regi_form_23_screen_0_radiobuttonsgroup_0',
+    },
   },
 
   // ─── Firebase RTDB (Whitelist only) ───────────────────────────────────────
@@ -165,6 +170,7 @@ module.exports = {
   // ─── Firestore (CRM Database) ─────────────────────────────────────────────
   FIRESTORE: {
     COLLECTION: 'leads',
+    COUNTERS_DOC: 'system/counters',
     ENABLED: process.env.FIRESTORE_ENABLED !== 'false',
     PHASE: parseInt(process.env.FIRESTORE_PHASE || '2', 10)  // 1 = Sheet-first (parallel), 2 = Firestore-first
   },
@@ -221,10 +227,23 @@ module.exports = {
   SHEET_TO_FIRESTORE,    // auto-generated: { 'team': 'agent', 'status': 'status', ... }
   HISTORY_ACTIONS,       // auto-generated: { 'team': 'claimed', 'status': 'status_changed', ... }
 
+  // ─── Form Options & Status Values ─────────────────────────────────────────
+  FORM_OPTIONS: {
+    OFFLINE_OPTION: "Offline (અમદાવાદ ક્લાસ માં)",
+    OFFLINE_STATUS: "Ahm MC Link Sent",
+    ONLINE_STATUS: "Online MC Link Sent",
+    OFFLINE_GROUP_JOINED: "Ahm MC GrpJoined",
+    ONLINE_GROUP_JOINED: "Online MC GrpJoined",
+  },
+
+  CONVERTED_STATUSES: ['Admission Done', 'Seat Booked'],
+
   // ─── Defaults ─────────────────────────────────────────────────────────────
   DEFAULTS: {
     STATUS: 'Lead',
     TEAM: 'Not Assigned',
     INQUIRY: 'CGI',
-  }
+    ROBO_AGENT: 'ROBO',
+    SERIAL_OFFSET: 230000,
+  },
 };

@@ -14,8 +14,8 @@ const LOG_PREFIX = '[Firestore]';
 
 let db = null;
 
-const COLLECTION = 'leads';
-const COUNTERS_DOC = 'system/counters';
+const COLLECTION = config.FIRESTORE.COLLECTION;
+const COUNTERS_DOC = config.FIRESTORE.COUNTERS_DOC;
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -165,9 +165,9 @@ async function createLead(leadData) {
       ? config.STAGES.NOT_ASSIGNED
       : config.STAGES.AGENT_WORKING,
     status: leadData.status || config.DEFAULTS.STATUS,
-    agent: leadData.team || config.STAGES.NOT_ASSIGNED,
+    agent: leadData.team || config.DEFAULTS.TEAM,
     location: cleanString(leadData.location),
-    inquiry: leadData.inquiry || config.DEFAULTS.INQUIRY || 'CGI',
+    inquiry: leadData.inquiry || config.DEFAULTS.INQUIRY,
     product: cleanString(leadData.product),
     pipelineStage: leadData.pipelineStage || '',
     source: cleanString(leadData.source),
@@ -254,14 +254,14 @@ async function createOrUpdateLead(leadData, historyEntry) {
     }
     if (leadData.inquiry) {
       const currentInquiry = existing.data.inquiry || '';
-      if (!currentInquiry.split(' | ').includes(leadData.inquiry)) {
-        updates.inquiry = currentInquiry ? `${currentInquiry} | ${leadData.inquiry}` : leadData.inquiry;
+      if (!currentInquiry.split(' , ').includes(leadData.inquiry)) {
+        updates.inquiry = currentInquiry ? `${currentInquiry} , ${leadData.inquiry}` : leadData.inquiry;
       }
     }
     if (leadData.product) {
       const currentProduct = existing.data.product || '';
-      if (!currentProduct.split(' | ').includes(leadData.product)) {
-        updates.product = currentProduct ? `${currentProduct} | ${leadData.product}` : leadData.product;
+      if (!currentProduct.split(' , ').includes(leadData.product)) {
+        updates.product = currentProduct ? `${currentProduct} , ${leadData.product}` : leadData.product;
       }
     }
     if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;

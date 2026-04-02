@@ -20,9 +20,9 @@ async function handleFormSubmission(params) {
   const option  = params.option || '';
   const formNum = params.form_num || '';
 
-  const statusValue = option === "Offline (અમદાવાદ ક્લાસ માં)"
-    ? "Ahm MC Link Sent"
-    : "Online MC Link Sent";
+  const statusValue = option === config.FORM_OPTIONS.OFFLINE_OPTION
+    ? config.FORM_OPTIONS.OFFLINE_STATUS
+    : config.FORM_OPTIONS.ONLINE_STATUS;
 
   const whitelistPhone = formNum || phone;
 
@@ -40,7 +40,7 @@ async function handleFormSubmission(params) {
     // Firestore lead record
     try {
       await FirestoreService.createOrUpdateLead({
-        phone, name, regiNo: formNum, status: statusValue, inquiry: 'CGI',
+        phone, name, regiNo: formNum, status: statusValue, inquiry: config.DEFAULTS.INQUIRY,
       }, {
         action: 'form_submitted', by: 'system',
         details: { formNum, option, statusValue }
@@ -54,7 +54,7 @@ async function handleFormSubmission(params) {
   const customSheetWrite = async () => {
     const upsertResult = await SheetService.upsertContact({
       phone, name, source: 'WhatsApp',
-      remark: `Form submitted: ${option}`, inquiry: 'CGI',
+      remark: `Form submitted: ${option}`, inquiry: config.DEFAULTS.INQUIRY,
     });
     const C = config.SHEET_COLUMNS;
     await SheetService.updateContactCells(upsertResult.row, {
@@ -100,9 +100,9 @@ async function handleFlowReply(params) {
 
 function _extractFormDataFromContact(contact, phoneNumber) {
   const customParams = contact.customParams || [];
-  const nameParam   = customParams.find(p => p.name === 'mc_regi_form_23_screen_0_textinput_0');
-  const phoneParam  = customParams.find(p => p.name === 'mc_regi_form_23_screen_0_textinput_1');
-  const optionParam = customParams.find(p => p.name === 'mc_regi_form_23_screen_0_radiobuttonsgroup_0');
+  const nameParam   = customParams.find(p => p.name === config.WATI.FORM_PARAMS.NAME);
+  const phoneParam  = customParams.find(p => p.name === config.WATI.FORM_PARAMS.PHONE);
+  const optionParam = customParams.find(p => p.name === config.WATI.FORM_PARAMS.OPTION);
 
   if (!nameParam || !phoneParam || !optionParam) return null;
 

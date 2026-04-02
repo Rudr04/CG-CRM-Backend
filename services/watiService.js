@@ -102,7 +102,7 @@ async function sendRegistrationConfirmation(params) {
   const waId = params.wa_num || '';
   const name = params.name || '';
   const num = params.form_num || '';
-  const isOffline = params.option === "Offline (અમદાવાદ ક્લાસ માં)";
+  const isOffline = params.option === config.FORM_OPTIONS.OFFLINE_OPTION;
   const choice = isOffline ? "offline" : "online";
 
   if (!waId) throw new ValidationError('Phone number (wa_num) is required');

@@ -84,7 +84,7 @@ async function processEdit(edit, editor) {
       status: rowData.status || config.DEFAULTS.STATUS,
       team: rowData.team || config.STAGES.NOT_ASSIGNED,
       location: rowData.location || '',
-      inquiry: rowData.inquiry || 'CGI',
+      inquiry: rowData.inquiry || config.DEFAULTS.INQUIRY,
       product: rowData.product || '',
       source: 'sheet_backfill',
       channel: 'sheet_sync',
