@@ -193,18 +193,31 @@ async function findByPhone(phoneNumber) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
-  const response = await api.spreadsheets.values.get({
+  // Read only the phone column (derived from config, not hardcoded)
+  const phoneLetter = config.COLUMN_LETTERS.NUMBER;  // 'E'
+
+  const phoneResponse = await api.spreadsheets.values.get({
     spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!A2:S`
+    range: `${sheetName}!${phoneLetter}2:${phoneLetter}`
   });
 
-  const rows = response.data.values || [];
+  const phoneCol = phoneResponse.data.values || [];
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const registeredNum = row[config.SHEET_COLUMNS.NUMBER] || '';
+  for (let i = 0; i < phoneCol.length; i++) {
+    const registeredNum = phoneCol[i][0] || '';
     if (phoneNumbersMatch(phoneNumber, registeredNum)) {
-      return { row: i + 2, data: row };
+      const matchedRow = i + 2;
+
+      // Fetch full row data only for the matched row
+      const maxColIdx = Math.max(...Object.values(config.SHEET_COLUMNS));
+      const lastLetter = config.colLetter(maxColIdx);
+      const rowResponse = await api.spreadsheets.values.get({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `${sheetName}!A${matchedRow}:${lastLetter}${matchedRow}`
+      });
+
+      const rowData = (rowResponse.data.values && rowResponse.data.values[0]) || [];
+      return { row: matchedRow, data: rowData };
     }
   }
 

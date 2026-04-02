@@ -224,7 +224,10 @@ async function handleCommunityJoin(params) {
     sheetRow      = firestoreLead.data.sheetRow || null;
   } else {
     const sheetLead = await SheetService.findByPhone(phone);
-    if (!sheetLead) return { message: 'Phone not found' };
+    if (!sheetLead) {
+      console.warn(`[CommunityJoin] Phone not found in Firestore or Sheet: ${phone}`);
+      throw new ValidationError('Phone not found in CRM', { phone, handler: 'handleCommunityJoin' });
+    }
     sheetRow      = sheetLead.row;
     currentStatus = sheetLead.data[config.SHEET_COLUMNS.STATUS] || '';
     currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || config.DEFAULTS.TEAM;
