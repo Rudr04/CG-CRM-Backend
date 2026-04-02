@@ -61,6 +61,7 @@ async function handleFormSubmission(params) {
       [C.NAME]:    name,
       [C.STATUS]:  statusValue,
     });
+    return upsertResult;
   };
 
   const writeFn = buildWriteBoth(null, null, customFirestoreWrite, customSheetWrite);

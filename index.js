@@ -8,13 +8,10 @@
 require('dotenv').config();
 
 const functions = require('@google-cloud/functions-framework');
-const { Datastore } = require('@google-cloud/datastore');
 const config = require('./config');
 const { routeEvent, shouldSkipDuplicate } = require('./lib/router');
 const { errorToResponse } = require('./lib/errorHandler');
 const PendingQueue = require('./services/pendingQueue');
-
-const datastore = new Datastore();
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -54,49 +51,6 @@ function generateEventId(params) {
   if (type === 'sheet_edit') return `sheet_${timestamp}`;
   
   return `${type}_${waId}_${Math.floor(timestamp / 10000)}`;
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  MUTEX LOCKING
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function withMutex(waId, fn) {
-  if (!waId) return fn();
-  
-  const lockKey = datastore.key(['waId_locks', waId]);
-  const maxRetries = 60;
-  let retries = 0;
-  
-  while (retries < maxRetries) {
-    try {
-      const [lockEntity] = await datastore.get(lockKey);
-      if (!lockEntity) break;
-      await new Promise(r => setTimeout(r, 50));
-      retries++;
-    } catch (error) {
-      break;
-    }
-  }
-  
-  try {
-    await datastore.save({
-      key: lockKey,
-      data: { locked: true, timestamp: Date.now(), ttl: Math.floor(Date.now() / 1000) + 30 }
-    });
-  } catch (error) {
-    console.error(`Mutex acquire error: ${error.message}`);
-  }
-  
-  try {
-    return await fn();
-  } finally {
-    try {
-      await datastore.delete(lockKey);
-    } catch (error) {
-      console.error(`Mutex release error: ${error.message}`);
-    }
-  }
 }
 
 
