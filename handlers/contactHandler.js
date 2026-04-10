@@ -178,7 +178,7 @@ async function handleManualEntry(params) {
     const leadData = {
       phone, name: params.senderName || '',
       location: params.location || '',
-      inquiry: config.DEFAULTS.INQUIRY,
+      inquiry: params.inquiry || config.DEFAULTS.INQUIRY,
       product: params.product || '',
       source: params.source || 'Manual Entry',
       team: params.team || config.DEFAULTS.TEAM,
