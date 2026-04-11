@@ -85,11 +85,21 @@ function extractCountryInfo(phone) {
 
 async function getNextCgId() {
   const firestore = getDb();
-  const counterRef = firestore.doc(COUNTERS_DOC);
+
+  // Get current YYMM in IST
+  const now = new Date();
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const yy = String(ist.getFullYear()).slice(-2);
+  const mm = String(ist.getMonth() + 1).padStart(2, '0');
+  const period = `${yy}${mm}`;
+
+  const counterRef = firestore.doc(`counters/cgid-${period}`);
 
   const newId = await firestore.runTransaction(async (transaction) => {
     const counterDoc = await transaction.get(counterRef);
-    let nextNum = counterDoc.exists ? (counterDoc.data().leadCounter || 0) + 1 : 1;
+    const nextNum = counterDoc.exists
+      ? (counterDoc.data().leadCounter || 0) + 1
+      : 1;
 
     transaction.set(counterRef, {
       leadCounter: nextNum,
@@ -99,7 +109,8 @@ async function getNextCgId() {
     return nextNum;
   });
 
-  return `CG${String(newId).padStart(5, '0')}`;
+  return `CG-${period}-${newId}`;
+  // No zero padding on the sequence number per spec
   // Transaction failure throws → createLead throws → buildWriteBoth catches → PendingQueue retries
 }
 
@@ -174,6 +185,21 @@ async function createLead(leadData) {
     message: cleanString(leadData.message),
     remark: cleanString(leadData.remark),
     regiNo: cleanString(leadData.regiNo),
+    rating: '',
+    cbDate: '',
+    salesRemark: '',
+    approvalDate: '',
+    quantity: '',
+    productPrice: '',
+    amountPaid: '',
+    pendingAmount: '',
+    modeOfPay: '',
+    paymentRefId: '',
+    dateOfPayment: '',
+    receivedAccount: '',
+    deliveryStatus: '',
+    deliveryDate: '',
+    deliveryRemark: '',
     createdAt: now,
     updatedAt: now,
     sheetRow: leadData.sheetRow || null,
@@ -265,6 +291,21 @@ async function createOrUpdateLead(leadData, historyEntry) {
       }
     }
     if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;
+
+    const overwriteFields = [
+      'rating', 'cbDate',
+      'salesRemark', 'approvalDate',
+      'quantity', 'productPrice', 'amountPaid', 'pendingAmount',
+      'modeOfPay', 'paymentRefId', 'dateOfPayment', 'receivedAccount',
+      'deliveryStatus', 'deliveryDate', 'deliveryRemark',
+    ];
+
+    for (const field of overwriteFields) {
+      if (leadData[field] !== undefined && leadData[field] !== '') {
+        updates[field] = leadData[field];
+      }
+    }
+
     return await updateLead(phone, updates, historyEntry || {
       action: 'contact_updated', by: 'system', details: { source: leadData.source || '' }
     });
