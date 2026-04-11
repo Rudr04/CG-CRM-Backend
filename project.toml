@@ -1,0 +1,4 @@
+[build]
+[[build.env]]
+name = "DOCKER_API_VERSION"
+value = "1.41"
