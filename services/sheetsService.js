@@ -24,6 +24,65 @@ async function getSheets() {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  DYNAMIC COLUMN MAP — reads header row, caches with 5-min TTL
+//  Returns: { map: { fieldKey: colIndex }, reverseMap: { colIndex: fieldKey }, headerCount, fetchedAt }
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CACHE_TTL_MS = 5 * 60 * 1000;  // 5 minutes
+const _columnMapCache = {};  // keyed by sheetName
+
+async function getColumnMap(sheetName) {
+  const cached = _columnMapCache[sheetName];
+  if (cached && (Date.now() - cached.fetchedAt < CACHE_TTL_MS)) {
+    return cached;
+  }
+
+  const api = await getSheets();
+  const response = await api.spreadsheets.values.get({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!1:1`
+  });
+
+  const headers = (response.data.values && response.data.values[0]) || [];
+  const map = {};          // fieldKey → 0-based colIndex
+  const reverseMap = {};   // 0-based colIndex → fieldKey
+
+  for (let i = 0; i < headers.length; i++) {
+    const headerText = (headers[i] || '').trim();
+    if (!headerText) continue;
+    const fieldKey = config.HEADER_TO_FIELD[headerText];
+    if (fieldKey) {
+      map[fieldKey] = i;
+      reverseMap[i] = fieldKey;
+    }
+  }
+
+  // Validate critical fields
+  const critical = ['number', 'name', 'status', 'team'];
+  const missing = critical.filter(f => map[f] === undefined);
+  if (missing.length > 0) {
+    console.error(`[Sheet] WARNING: Missing headers in ${sheetName}: ${missing.join(', ')}`);
+  }
+
+  const result = { map, reverseMap, headerCount: headers.length, fetchedAt: Date.now() };
+  _columnMapCache[sheetName] = result;
+  console.log(`[Sheet] Column map cached for ${sheetName}: ${Object.keys(map).length} fields mapped`);
+  return result;
+}
+
+/**
+ * Convert raw row array to field-keyed object using column map
+ */
+function rowToObject(rowArray, colMap) {
+  const obj = {};
+  for (const [fieldKey, colIdx] of Object.entries(colMap.map)) {
+    obj[fieldKey] = (rowArray[colIdx] || '').toString();
+  }
+  return obj;
+}
+
+
 // ═════════════════════════════════════════════════════════════
 //  UPSERT CONTACT — unified create-or-update in Sheet5
 //
@@ -45,40 +104,40 @@ async function upsertContact(leadData) {
 
   if (!phone) throw new Error('upsertContact: phone is required');
 
-  // Check if row already exists
   const existing = await findByPhone(phone);
+  const colMap = await getColumnMap(sheetName);  // cached from findByPhone
+  const M = colMap.map;
 
   if (existing) {
     // ── Update existing row ──
-    const C = config.SHEET_COLUMNS;
-    const cellUpdates = {};
+    const cellUpdates = {};  // colIndex → value
 
     // Append fields (merge with existing)
     if (leadData.message) {
-      const current = existing.data[C.MESSAGE] || '';
-      cellUpdates[C.MESSAGE] = current ? `${current} | ${leadData.message}` : leadData.message;
+      const current = existing.data.message || '';
+      cellUpdates[M.message] = current ? `${current} | ${leadData.message}` : leadData.message;
     }
     if (leadData.remark) {
-      const current = existing.data[C.REMARK] || '';
-      cellUpdates[C.REMARK] = current ? `${current} | ${leadData.remark}` : leadData.remark;
+      const current = existing.data.remark || '';
+      cellUpdates[M.remark] = current ? `${current} | ${leadData.remark}` : leadData.remark;
     }
 
     // Fill blanks (don't overwrite existing)
-    if (leadData.name && !existing.data[C.NAME])         cellUpdates[C.NAME] = leadData.name;
-    if (leadData.location && !existing.data[C.LOCATION]) cellUpdates[C.LOCATION] = leadData.location;
-    if (leadData.source && !existing.data[C.SOURCE])     cellUpdates[C.SOURCE] = leadData.source;
+    if (leadData.name && !existing.data.name)         cellUpdates[M.name] = leadData.name;
+    if (leadData.location && !existing.data.location) cellUpdates[M.location] = leadData.location;
+    if (leadData.source && !existing.data.source)     cellUpdates[M.source] = leadData.source;
 
-    // Append inquiry and product (never overwrite — use | separator)
+    // Append inquiry and product (comma-space separator for Sheet dropdowns)
     if (leadData.inquiry) {
-      const currentInquiry = existing.data[C.INQUIRY] || '';
+      const currentInquiry = existing.data.inquiry || '';
       if (!currentInquiry.split(', ').includes(leadData.inquiry)) {
-        cellUpdates[C.INQUIRY] = currentInquiry ? `${currentInquiry}, ${leadData.inquiry}` : leadData.inquiry;
+        cellUpdates[M.inquiry] = currentInquiry ? `${currentInquiry}, ${leadData.inquiry}` : leadData.inquiry;
       }
     }
     if (leadData.product) {
-      const currentProduct = existing.data[C.PRODUCT] || '';
+      const currentProduct = existing.data.product || '';
       if (!currentProduct.split(', ').includes(leadData.product)) {
-        cellUpdates[C.PRODUCT] = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
+        cellUpdates[M.product] = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
       }
     }
 
@@ -112,32 +171,41 @@ async function upsertContact(leadData) {
     const remark   = leadData.remark || '';
     const status   = leadData.status || config.DEFAULTS.STATUS;
 
-    const C  = config.SHEET_COLUMNS;
-    const CL = config.COLUMN_LETTERS;
-    const totalCols = C.PIPELINE_STAGE + 1;  // 19 columns (0-18)
+    const totalCols = colMap.headerCount;
     const rowData = new Array(totalCols).fill('');
 
-    rowData[C.CGID]      = `=ROW()-1+${config.DEFAULTS.SERIAL_OFFSET}`;
-    rowData[C.DATE]      = date;
-    rowData[C.TIME]      = time;
-    rowData[C.NAME]      = name;
-    rowData[C.NUMBER]    = phone;
-    rowData[C.LOCATION]  = location;
-    rowData[C.INQUIRY]   = inquiry;
-    rowData[C.PRODUCT]   = product;
-    rowData[C.MESSAGE]   = message;
-    rowData[C.SOURCE]    = source;
-    rowData[C.TEAM]      = team;
-    rowData[C.STATUS]    = status;
-    rowData[C.REMARK]    = remark;
-    rowData[C.DAY]       = `=IFERROR(WEEKDAY($${CL.DATE}${nextRow},2)&TEXT($${CL.DATE}${nextRow},"dddd"), "")`;
-    rowData[C.HOURS]     = `=IFERROR(HOUR($${CL.TIME}${nextRow}), "")`;
-    const switchCases = config.CONVERTED_STATUSES.map(s => `"${s}",1`).join(',');
-    rowData[C.CONVERTED] = `=SWITCH(${CL.STATUS}${nextRow},${switchCases},0)`;
+    const set = (fieldKey, value) => {
+      if (M[fieldKey] !== undefined) rowData[M[fieldKey]] = value;
+    };
 
+    set('cgid',     `=ROW()-1+${config.DEFAULTS.SERIAL_OFFSET}`);
+    set('date',     date);
+    set('time',     time);
+    set('name',     name);
+    set('number',   phone);
+    set('location', location);
+    set('inquiry',  inquiry);
+    set('product',  product);
+    set('message',  message);
+    set('source',   source);
+    set('team',     team);
+    set('status',   status);
+    set('remark',   remark);
+
+    const dateLetter   = config.colLetter(M.date);
+    const timeLetter   = config.colLetter(M.time);
+    const statusLetter = config.colLetter(M.status);
+
+    set('day',   `=IFERROR(WEEKDAY($${dateLetter}${nextRow},2)&TEXT($${dateLetter}${nextRow},"dddd"), "")`);
+    set('hours', `=IFERROR(HOUR($${timeLetter}${nextRow}), "")`);
+
+    const switchCases = config.CONVERTED_STATUSES.map(s => `"${s}",1`).join(',');
+    set('converted', `=SWITCH(${statusLetter}${nextRow},${switchCases},0)`);
+
+    const lastLetter = config.colLetter(totalCols - 1);
     await api.spreadsheets.values.append({
       spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!A:S`,
+      range: `${sheetName}!A:${lastLetter}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] }
     });
@@ -152,10 +220,10 @@ async function upsertContact(leadData) {
 //  UPDATE CONTACT CELLS — targeted update on a known row
 //
 //  Use when you already know the row number and want to update
-//  specific fields. Keys are SHEET_COLUMNS indices (0-based).
+//  specific fields. Keys are 0-based column indices.
 //
 //  @param {number} row    - Sheet row number
-//  @param {Object} fields - { [config.SHEET_COLUMNS.STATUS]: 'X', ... }
+//  @param {Object} fields - { [colIdx]: 'value', ... } — colIdx from getColumnMap()
 // ═════════════════════════════════════════════════════════════
 async function updateContactCells(row, fields) {
   if (!row) throw new Error('updateContactCells: row is required');
@@ -193,10 +261,14 @@ async function updateContactCells(row, fields) {
 async function findByPhone(phoneNumber) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
+  const colMap = await getColumnMap(sheetName);
 
-  // Read only the phone column (derived from config, not hardcoded)
-  const phoneLetter = config.COLUMN_LETTERS.NUMBER;  // 'E'
+  const phoneColIdx = colMap.map.number;
+  if (phoneColIdx === undefined) {
+    throw new Error('findByPhone: "Mobile Number" header not found in sheet');
+  }
 
+  const phoneLetter = config.colLetter(phoneColIdx);
   const phoneResponse = await api.spreadsheets.values.get({
     spreadsheetId: config.SPREADSHEET_ID,
     range: `${sheetName}!${phoneLetter}2:${phoneLetter}`
@@ -209,16 +281,14 @@ async function findByPhone(phoneNumber) {
     if (phoneNumbersMatch(phoneNumber, registeredNum)) {
       const matchedRow = i + 2;
 
-      // Fetch full row data only for the matched row
-      const maxColIdx = Math.max(...Object.values(config.SHEET_COLUMNS));
-      const lastLetter = config.colLetter(maxColIdx);
+      const lastLetter = config.colLetter(colMap.headerCount - 1);
       const rowResponse = await api.spreadsheets.values.get({
         spreadsheetId: config.SPREADSHEET_ID,
         range: `${sheetName}!A${matchedRow}:${lastLetter}${matchedRow}`
       });
 
-      const rowData = (rowResponse.data.values && rowResponse.data.values[0]) || [];
-      return { row: matchedRow, data: rowData };
+      const rowArray = (rowResponse.data.values && rowResponse.data.values[0]) || [];
+      return { row: matchedRow, data: rowToObject(rowArray, colMap) };
     }
   }
 
@@ -304,7 +374,7 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
 
     if (foundRow) {
       // NOTE: These indices are for the OnlineAttendence sheet layout,
-      // NOT the DSR sheet. Do not use config.SHEET_COLUMNS here.
+      // NOT the DSR sheet. Do not use the DSR column map here.
       const currentAttendance = fullRowData[11] || '';  // OnlineAttendence column L
       const updatedAttendance = buildAttendance(currentAttendance);
 
@@ -366,6 +436,8 @@ module.exports = {
   upsertContact,
   updateContactCells,
   findByPhone,
+  getColumnMap,
+  rowToObject,
   checkFirebaseWhitelist,
   updateAttendance,
 };

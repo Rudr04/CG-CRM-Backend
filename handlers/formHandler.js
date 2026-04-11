@@ -56,10 +56,11 @@ async function handleFormSubmission(params) {
       phone, name, source: 'WhatsApp',
       remark: `Form submitted: ${option}`, inquiry: config.DEFAULTS.INQUIRY,
     });
-    const C = config.SHEET_COLUMNS;
+    const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+    const M = colMap.map;
     await SheetService.updateContactCells(upsertResult.row, {
-      [C.NAME]:    name,
-      [C.STATUS]:  statusValue,
+      [M.name]:    name,
+      [M.status]:  statusValue,
     });
     return upsertResult;
   };

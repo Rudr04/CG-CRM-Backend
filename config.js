@@ -60,26 +60,7 @@ const TIMEZONE = 'Asia/Kolkata';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SHEET COLUMN INDICES (0-based) — SINGLE SOURCE OF TRUTH
-//
-//  A  CGID        H  PRODUCT     O  REMARK
-//  B  DATE        I  MESSAGE     P  DAY
-//  C  TIME        J  SOURCE      Q  HOURS
-//  D  NAME        K  TEAM        R  CONVERTED
-//  E  NUMBER      L  STATUS      S  PIPELINE_STAGE
-//  F  LOCATION    M  RATING
-//  G  INQUIRY     N  CB_DATE
-// ═══════════════════════════════════════════════════════════════════════════
-
-const SHEET_COLUMNS = {
-  CGID: 0, DATE: 1, TIME: 2, NAME: 3, NUMBER: 4, LOCATION: 5,
-  INQUIRY: 6, PRODUCT: 7, MESSAGE: 8, SOURCE: 9, TEAM: 10,
-  STATUS: 11, RATING: 12, CB_DATE: 13, REMARK: 14, DAY: 15,
-  HOURS: 16, CONVERTED: 17, PIPELINE_STAGE: 18,
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  COLUMN UTILITIES — derive everything from SHEET_COLUMNS
+//  COLUMN UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -95,41 +76,85 @@ function colLetter(idx) {
   return letter;
 }
 
-// 0-based index → column letter, auto-generated from SHEET_COLUMNS
-const COLUMN_LETTERS = {};
-for (const [name, idx] of Object.entries(SHEET_COLUMNS)) {
-  COLUMN_LETTERS[name] = colLetter(idx);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FIELD HEADERS — Maps internal field keys to sheet header text
+//  Used by sheetsService.getColumnMap() to find columns dynamically
+//  To add a field: add here + add to sheet header row
+//  To rename a column: change header text here + in sheet
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FIELD_HEADERS = {
+  cgid:          'CGID',
+  date:          'Date',
+  time:          'Time',
+  name:          'Name',
+  number:        'Mobile Number',
+  location:      'Location',
+  inquiry:       'Inquiry',
+  product:       'Product',
+  message:       'Message',
+  source:        'Source',
+  team:          'Team',
+  status:        'Status',
+  rating:        'Rating',
+  cbDate:        'CB Date',
+  remark:        'Remark',
+  day:           'Day',
+  hours:         'Hours',
+  converted:     'Converted',
+  pipelineStage: 'Pipeline Stage',
+  // Phase 3 fields (will exist on other sheets later)
+  salesRemark:     'Sales Remark',
+  approvalDate:    'Approval Date',
+  quantity:        'Quantity',
+  productPrice:    'Product Price',
+  amountPaid:      'Amount Paid',
+  pendingAmount:   'Pending Amount',
+  modeOfPay:       'Mode of Pay',
+  paymentRefId:    'Payment Ref. ID',
+  dateOfPayment:   'Date of Payment',
+  receivedAccount: 'Received Account',
+  deliveryStatus:  'Delivery Status',
+  deliveryDate:    'Delivery Date',
+  deliveryRemark:  'Delivery Remark',
+};
+
+// Reverse map: header text → field key
+const HEADER_TO_FIELD = {};
+for (const [field, header] of Object.entries(FIELD_HEADERS)) {
+  HEADER_TO_FIELD[header] = field;
 }
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  TRACKED FIELDS — complete mapping for Sheet↔Firestore sync
-//  Keys are SHEET_COLUMNS indices. Single source for:
-//    - which columns trigger sync (GAS onEdit checks this)
-//    - GAS field name sent in payload
-//    - Firestore field name written to doc
-//    - history action logged in history[] array
+//  TRACKED FIELDS — Which fields trigger Firestore sync on sheet edit
+//  Keys are field names (matching what GAS sends in edit.field)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TRACKED_FIELDS = {
-  [SHEET_COLUMNS.NAME]:           { sheetField: 'name',           firestoreField: 'name',          historyAction: 'name_updated' },
-  [SHEET_COLUMNS.LOCATION]:       { sheetField: 'location',       firestoreField: 'location',      historyAction: 'location_updated' },
-  [SHEET_COLUMNS.INQUIRY]:        { sheetField: 'inquiry',        firestoreField: 'inquiry',       historyAction: 'inquiry_changed' },
-  [SHEET_COLUMNS.PRODUCT]:        { sheetField: 'product',        firestoreField: 'product',       historyAction: 'product_added' },
-  [SHEET_COLUMNS.TEAM]:           { sheetField: 'team',           firestoreField: 'agent',         historyAction: 'claimed' },
-  [SHEET_COLUMNS.STATUS]:         { sheetField: 'status',         firestoreField: 'status',        historyAction: 'status_changed' },
-  [SHEET_COLUMNS.RATING]:         { sheetField: 'rating',         firestoreField: 'rating',        historyAction: 'rating_changed' },
-  [SHEET_COLUMNS.REMARK]:         { sheetField: 'remark',         firestoreField: 'remark',        historyAction: 'remark_added' },
-  [SHEET_COLUMNS.PIPELINE_STAGE]: { sheetField: 'pipeline_stage', firestoreField: 'pipelineStage', historyAction: 'stage_changed' },
+  name:          { firestoreField: 'name',          historyAction: 'name_updated' },
+  location:      { firestoreField: 'location',      historyAction: 'location_updated' },
+  inquiry:       { firestoreField: 'inquiry',       historyAction: 'inquiry_changed' },
+  product:       { firestoreField: 'product',       historyAction: 'product_added' },
+  team:          { firestoreField: 'agent',          historyAction: 'claimed' },
+  status:        { firestoreField: 'status',         historyAction: 'status_changed' },
+  rating:        { firestoreField: 'rating',         historyAction: 'rating_changed' },
+  remark:        { firestoreField: 'remark',         historyAction: 'remark_added' },
+  pipelineStage: { firestoreField: 'pipelineStage',  historyAction: 'stage_changed' },
+  // Phase 3
+  salesRemark:     { firestoreField: 'salesRemark',     historyAction: 'sales_remark_added' },
+  deliveryStatus:  { firestoreField: 'deliveryStatus',  historyAction: 'delivery_status_changed' },
+  deliveryRemark:  { firestoreField: 'deliveryRemark',  historyAction: 'delivery_remark_added' },
 };
 
-// Auto-generated lookup maps from TRACKED_FIELDS
+// Auto-generated lookup maps
 const SHEET_TO_FIRESTORE = {};
 const HISTORY_ACTIONS = {};
 
-for (const [colIdx, mapping] of Object.entries(TRACKED_FIELDS)) {
-  SHEET_TO_FIRESTORE[mapping.sheetField] = mapping.firestoreField;
-  HISTORY_ACTIONS[mapping.sheetField] = mapping.historyAction;
+for (const [fieldName, mapping] of Object.entries(TRACKED_FIELDS)) {
+  SHEET_TO_FIRESTORE[fieldName] = mapping.firestoreField;
+  HISTORY_ACTIONS[fieldName] = mapping.historyAction;
 }
 
 
@@ -218,12 +243,12 @@ module.exports = {
   },
 
   // ─── Sheet Columns ─────────────────────────────────────────────────────────
-  SHEET_COLUMNS,         // 0-based indices: { NAME: 3, STATUS: 11, ... }
-  COLUMN_LETTERS,        // auto-generated: { NAME: 'D', STATUS: 'L', ... }
   colLetter,             // utility: colLetter(3) → 'D'
+  FIELD_HEADERS,         // fieldKey → sheet header text
+  HEADER_TO_FIELD,       // sheet header text → fieldKey
 
   // ─── Field Sync Mappings ────────────────────────────────────────────────────
-  TRACKED_FIELDS,        // full mapping: colIdx → { sheetField, firestoreField, historyAction }
+  TRACKED_FIELDS,        // fieldName → { firestoreField, historyAction }
   SHEET_TO_FIRESTORE,    // auto-generated: { 'team': 'agent', 'status': 'status', ... }
   HISTORY_ACTIONS,       // auto-generated: { 'team': 'claimed', 'status': 'status_changed', ... }
 

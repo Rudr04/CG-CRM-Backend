@@ -232,8 +232,8 @@ async function handleCommunityJoin(params) {
       throw new ValidationError('Phone not found in CRM', { phone, handler: 'handleCommunityJoin' });
     }
     sheetRow      = sheetLead.row;
-    currentStatus = sheetLead.data[config.SHEET_COLUMNS.STATUS] || '';
-    currentTeam   = sheetLead.data[config.SHEET_COLUMNS.TEAM]   || config.DEFAULTS.TEAM;
+    currentStatus = sheetLead.data.status || '';
+    currentTeam   = sheetLead.data.team   || config.DEFAULTS.TEAM;
   }
 
   const newStatus   = currentStatus.includes('Online') ? config.FORM_OPTIONS.ONLINE_GROUP_JOINED : config.FORM_OPTIONS.OFFLINE_GROUP_JOINED;
@@ -251,9 +251,10 @@ async function handleCommunityJoin(params) {
 
   const customSheet = async () => {
     if (sheetRow) {
-      const C = config.SHEET_COLUMNS;
-      const cellUpdates = { [C.STATUS]: newStatus };
-      if (assignRobo) cellUpdates[C.TEAM] = config.DEFAULTS.ROBO_AGENT;
+      const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+      const M = colMap.map;
+      const cellUpdates = { [M.status]: newStatus };
+      if (assignRobo) cellUpdates[M.team] = config.DEFAULTS.ROBO_AGENT;
       await SheetService.updateContactCells(sheetRow, cellUpdates);
     }
   };
