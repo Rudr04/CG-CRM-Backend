@@ -88,25 +88,39 @@ async function handleStageTransition(params) {
 
   console.log(`${LOG_PREFIX} Firestore updated: ${existing.data.cgId} → ${newStage}`);
 
-  // 5. Route to target sheet (if routing config exists for this stage)
+  // 5. Route — forward transitions (to new sheet) and backward transitions (return to DSR)
   const routeConfig = config.SHEET_ROUTING[newStage];
-  if (routeConfig) {
+  const needsRouting = !!routeConfig || newStage === config.STAGES.AGENT_WORKING;
+
+  if (needsRouting) {
     try {
       const routeResult = await stageRouter.routeLead({
         phone,
         cgId: existing.data.cgId,
         targetStage: newStage,
-        routeConfig,
+        routeConfig: routeConfig || null,
         sourceRow,
+        sourceSpreadsheetId: params.sourceSpreadsheetId || config.SPREADSHEET_ID,
+        sourceTabName: params.sourceTabName || config.SHEETS.DSR,
       });
-      console.log(`${LOG_PREFIX} Routed ${existing.data.cgId} to ${newStage}: ${JSON.stringify(routeResult)}`);
+      console.log(`${LOG_PREFIX} Routed ${existing.data.cgId}: ${JSON.stringify(routeResult)}`);
     } catch (routeErr) {
       console.error(`${LOG_PREFIX} Routing failed: ${routeErr.message}`);
-      // Firestore is updated. Routing failure is non-fatal.
-      // Lead can be manually moved or re-triggered.
     }
   } else {
-    console.log(`${LOG_PREFIX} No routing config for '${newStage}' — Firestore only`);
+    console.log(`${LOG_PREFIX} No routing for '${newStage}' — Firestore only`);
+
+    // Still archive source row for terminal transitions (dead)
+    if (sourceRow) {
+      try {
+        const srcSpreadsheet = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
+        const srcTab = params.sourceTabName || config.SHEETS.DSR;
+        await SheetService.formatRowAsArchived(srcSpreadsheet, srcTab, sourceRow);
+        console.log(`${LOG_PREFIX} Archived source row ${sourceRow}`);
+      } catch (fmtErr) {
+        console.error(`${LOG_PREFIX} Archive failed (non-fatal): ${fmtErr.message}`);
+      }
+    }
   }
 
   return {

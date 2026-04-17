@@ -615,6 +615,65 @@ async function formatRowAsArchived(spreadsheetId, tabName, row) {
 }
 
 
+// ═════════════════════════════════════════════════════════════
+//  UN-ARCHIVE ROW — Remove strikeout + grey (restore normal)
+//
+//  Reverse of formatRowAsArchived. Used when a lead is
+//  rejected back to its original sheet.
+//
+//  @param {string} spreadsheetId — target spreadsheet
+//  @param {string} tabName — target sheet tab name
+//  @param {number} row — 1-based row number to restore
+// ═════════════════════════════════════════════════════════════
+async function unarchiveRow(spreadsheetId, tabName, row) {
+  const api = await getSheets();
+
+  const spreadsheet = await api.spreadsheets.get({
+    spreadsheetId: spreadsheetId,
+    fields: 'sheets.properties'
+  });
+
+  const targetSheet = spreadsheet.data.sheets.find(
+    s => s.properties.title === tabName
+  );
+  if (!targetSheet) {
+    throw new Error(`unarchiveRow: Tab "${tabName}" not found`);
+  }
+  const sheetId = targetSheet.properties.sheetId;
+
+  await api.spreadsheets.batchUpdate({
+    spreadsheetId: spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: row - 1,
+              endRowIndex: row,
+              startColumnIndex: 0,
+              endColumnIndex: 50,
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: {
+                  strikethrough: false,
+                  foregroundColor: { red: 0, green: 0, blue: 0 },  // black text
+                },
+                backgroundColor: { red: 1, green: 1, blue: 1 },  // white bg
+              },
+            },
+            fields: 'userEnteredFormat(textFormat,backgroundColor)',
+          },
+        },
+      ],
+    },
+  });
+
+  console.log(`[Sheet] Row ${row} un-archived in ${tabName}`);
+}
+
+
 module.exports = {
   upsertContact,
   updateContactCells,
@@ -625,4 +684,5 @@ module.exports = {
   updateAttendance,
   insertRowToSheet,
   formatRowAsArchived,
+  unarchiveRow,
 };

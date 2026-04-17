@@ -279,8 +279,7 @@ module.exports = {
   STAGE_TRANSITIONS: {
     'unclaimed':      ['dead'],
     'agent_working':  ['sales_review', 'dead'],
-    // Future stages (will be enabled in later rounds):
-    'sales_review':   ['payment_pending', 'dead'],
+    'sales_review':   ['payment_pending', 'agent_working', 'dead'],
     // 'payment_pending': ['delivery', 'dead'],
     // 'delivery':       ['completed', 'dead'],
   },
