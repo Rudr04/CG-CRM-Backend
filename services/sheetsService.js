@@ -432,6 +432,189 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
 }
 
 
+// ═════════════════════════════════════════════════════════════
+//  INSERT ROW TO SHEET — Write lead data to any target sheet
+//
+//  Uses dynamic column mapping: reads row 1 headers of the
+//  target sheet, maps Firestore field keys to column positions.
+//
+//  @param {string} spreadsheetId — target spreadsheet
+//  @param {string} tabName — target sheet tab name
+//  @param {Object} leadData — Firestore document data (field-keyed)
+//  @returns {{ row: number }}
+// ═════════════════════════════════════════════════════════════
+async function insertRowToSheet(spreadsheetId, tabName, leadData) {
+  const api = await getSheets();
+
+  // Read target sheet headers dynamically
+  const headerResponse = await api.spreadsheets.values.get({
+    spreadsheetId: spreadsheetId,
+    range: `${tabName}!1:1`
+  });
+
+  const headers = (headerResponse.data.values && headerResponse.data.values[0]) || [];
+  if (headers.length === 0) {
+    throw new Error(`insertRowToSheet: No headers found in ${tabName}`);
+  }
+
+  // Build field key → column index map for target sheet
+  const targetMap = {};
+  for (let i = 0; i < headers.length; i++) {
+    const headerText = (headers[i] || '').trim();
+    if (!headerText) continue;
+    const fieldKey = config.HEADER_TO_FIELD[headerText];
+    if (fieldKey) targetMap[fieldKey] = i;
+  }
+
+  // Get next row number
+  const rowCountResponse = await api.spreadsheets.values.get({
+    spreadsheetId: spreadsheetId,
+    range: `${tabName}!A2:A`
+  });
+  const existingRows = rowCountResponse.data.values || [];
+  const nextRow = existingRows.length + 2;
+
+  // Build row array using target sheet's column positions
+  const totalCols = headers.length;
+  const rowData = new Array(totalCols).fill('');
+
+  // Map Firestore field names to internal field keys
+  // leadData uses Firestore keys (cgId, agent, etc.)
+  // HEADER_TO_FIELD/FIELD_HEADERS use internal keys (cgid, team, etc.)
+  const firestoreToFieldKey = {
+    cgId:           'cgid',
+    createdAt:      'date',       // Will be formatted
+    name:           'name',
+    phone:          'number',
+    location:       'location',
+    inquiry:        'inquiry',
+    product:        'product',
+    source:         'source',
+    agent:          'team',       // Firestore 'agent' → sheet 'Team'
+    status:         'status',
+    rating:         'rating',
+    remark:         'remark',
+    cbDate:         'cbDate',
+    pipelineStage:  'pipelineStage',
+    // Phase 3 fields
+    salesRemark:    'salesRemark',
+    approvalDate:   'approvalDate',
+    quantity:       'quantity',
+    productPrice:   'productPrice',
+    amountPaid:     'amountPaid',
+    pendingAmount:  'pendingAmount',
+    modeOfPay:      'modeOfPay',
+    paymentRefId:   'paymentRefId',
+    dateOfPayment:  'dateOfPayment',
+    receivedAccount:'receivedAccount',
+    deliveryStatus: 'deliveryStatus',
+    deliveryDate:   'deliveryDate',
+    deliveryRemark: 'deliveryRemark',
+  };
+
+  const set = (fieldKey, value) => {
+    if (targetMap[fieldKey] !== undefined && value !== undefined && value !== null) {
+      rowData[targetMap[fieldKey]] = value;
+    }
+  };
+
+  // Map each Firestore field to the target sheet
+  for (const [fsKey, fieldKey] of Object.entries(firestoreToFieldKey)) {
+    let value = leadData[fsKey];
+    if (value === undefined || value === null) value = '';
+
+    // Special handling for date — Firestore stores ISO string, sheet needs MM/DD/YYYY
+    if (fsKey === 'createdAt' && value) {
+      try {
+        const d = new Date(value);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        value = `${month}/${day}/${year}`;
+      } catch (e) {
+        // Keep original value if parsing fails
+      }
+    }
+
+    set(fieldKey, value);
+  }
+
+  // Append to target sheet
+  const lastLetter = config.colLetter(totalCols - 1);
+  await api.spreadsheets.values.append({
+    spreadsheetId: spreadsheetId,
+    range: `${tabName}!A:${lastLetter}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [rowData] }
+  });
+
+  console.log(`[Sheet] Inserted row ${nextRow} into ${tabName} for ${leadData.cgId}`);
+  return { row: nextRow };
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  FORMAT ROW AS ARCHIVED — Strikeout + grey a row
+//
+//  Used when a lead transitions to another sheet.
+//  Visual indicator that the lead has moved on.
+//
+//  @param {string} spreadsheetId — source spreadsheet
+//  @param {string} tabName — source sheet tab name
+//  @param {number} row — 1-based row number to format
+// ═════════════════════════════════════════════════════════════
+async function formatRowAsArchived(spreadsheetId, tabName, row) {
+  const api = await getSheets();
+
+  // Get the sheet's gid (sheetId) — needed for formatting requests
+  const spreadsheet = await api.spreadsheets.get({
+    spreadsheetId: spreadsheetId,
+    fields: 'sheets.properties'
+  });
+
+  const targetSheet = spreadsheet.data.sheets.find(
+    s => s.properties.title === tabName
+  );
+  if (!targetSheet) {
+    throw new Error(`formatRowAsArchived: Tab "${tabName}" not found`);
+  }
+  const sheetId = targetSheet.properties.sheetId;
+
+  // Apply strikethrough + grey text + light grey background
+  await api.spreadsheets.batchUpdate({
+    spreadsheetId: spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          // Strikethrough text
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: row - 1,  // 0-based
+              endRowIndex: row,
+              startColumnIndex: 0,
+              endColumnIndex: 50,  // generous upper bound
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: {
+                  strikethrough: true,
+                  foregroundColor: { red: 0.6, green: 0.6, blue: 0.6 },  // grey text
+                },
+                backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 },  // light grey bg
+              },
+            },
+            fields: 'userEnteredFormat(textFormat,backgroundColor)',
+          },
+        },
+      ],
+    },
+  });
+
+  console.log(`[Sheet] Row ${row} formatted as archived in ${tabName}`);
+}
+
+
 module.exports = {
   upsertContact,
   updateContactCells,
@@ -440,4 +623,6 @@ module.exports = {
   rowToObject,
   checkFirebaseWhitelist,
   updateAttendance,
+  insertRowToSheet,
+  formatRowAsArchived,
 };

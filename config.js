@@ -271,4 +271,28 @@ module.exports = {
     ROBO_AGENT: 'ROBO',
     SERIAL_OFFSET: 230000,
   },
+
+  // ─── Stage Transitions ────────────────────────────────────────────────────
+  // Maps: currentStage → [allowed target stages]
+  // Any transition not listed here is BLOCKED
+  STAGE_TRANSITIONS: {
+    'unclaimed':      ['dead'],
+    'agent_working':  ['sales_review', 'dead'],
+    // Future stages (will be enabled in later rounds):
+    // 'sales_review':   ['payment_pending', 'dead'],
+    // 'payment_pending': ['delivery', 'dead'],
+    // 'delivery':       ['completed', 'dead'],
+  },
+
+  // ─── Sheet Routing ────────────────────────────────────────────────────────
+  // Maps: target stage → spreadsheet config for cross-sheet routing
+  SHEET_ROUTING: {
+    'sales_review': {
+      spreadsheetId: '1Kiw7dB0qedZxJ5VcqL5IDekZLPN-HaeCYSSbbTkwcZ8',
+      tabName: 'Sheet1',
+    },
+    // Future sheets (will be added in later rounds):
+    // 'payment_pending': { spreadsheetId: '...', tabName: 'Sheet1' },
+    // 'delivery':        { spreadsheetId: '...', tabName: 'Sheet1' },
+  },
 };

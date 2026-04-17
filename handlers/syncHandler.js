@@ -3,6 +3,8 @@
 // ============================================================================
 
 const FirestoreService = require('../services/firestoreService');
+const SheetService = require('../services/sheetsService');
+const stageRouter = require('../services/stageRouter');
 const config = require('../config');
 const { normalizePhone } = require('../utils/helpers');
 
@@ -32,6 +34,19 @@ async function handleSheetEdit(params) {
       
       if (result.success) {
         results.synced++;
+
+        // Stage routing — will be handled by stageRouter (Prompt 2)
+        if (result.needsRouting) {
+          try {
+            const routeResult = await stageRouter.routeLead(result);
+            console.log(`${LOG_PREFIX} Routed ${result.cgId} to ${result.targetStage}: ${JSON.stringify(routeResult)}`);
+          } catch (routeErr) {
+            console.error(`${LOG_PREFIX} Routing failed for ${result.cgId}: ${routeErr.message}`);
+            // Firestore is already updated with new stage.
+            // Route failure is logged but doesn't fail the sync.
+            // The lead can be manually moved or re-triggered.
+          }
+        }
       } else {
         results.errors++;
         edit.failReason = result.reason || 'unknown';
@@ -97,12 +112,70 @@ async function processEdit(edit, editor) {
     if (!existing) return { success: false, reason: 'create_verification_failed' };
   }
 
+  // ── Stage transition validation ──
+  if (field === 'pipelineStage') {
+    const currentStage = existing.data.stage || existing.data.pipelineStage || config.STAGES.NOT_ASSIGNED;
+    const targetStage = newValue || '';
+
+    // Check if this transition is allowed
+    const allowedTargets = config.STAGE_TRANSITIONS[currentStage] || [];
+    if (!allowedTargets.includes(targetStage)) {
+      console.warn(`${LOG_PREFIX} BLOCKED stage transition: ${currentStage} → ${targetStage} (not in allowed: [${allowedTargets.join(', ')}])`);
+
+      // Revert the cell to its previous value
+      if (row) {
+        try {
+          const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+          const stageColIdx = colMap.map.pipelineStage;
+          if (stageColIdx !== undefined) {
+            await SheetService.updateContactCells(row, {
+              [stageColIdx]: currentStage
+            });
+            console.log(`${LOG_PREFIX} Reverted Stage cell to '${currentStage}' on row ${row}`);
+          }
+        } catch (revertErr) {
+          console.error(`${LOG_PREFIX} Failed to revert Stage cell: ${revertErr.message}`);
+        }
+      }
+
+      return { success: false, reason: 'invalid_stage_transition', from: currentStage, to: targetStage };
+    }
+
+    console.log(`${LOG_PREFIX} Valid stage transition: ${currentStage} → ${targetStage}`);
+
+    // Check if this transition requires cross-sheet routing
+    const routeConfig = config.SHEET_ROUTING[targetStage];
+    if (routeConfig) {
+      console.log(`${LOG_PREFIX} Stage transition requires routing to ${targetStage} sheet`);
+      // Routing will be handled after Firestore update (Prompt 2 adds stageRouter)
+    }
+  }
+
   const updates = { [firestoreField]: newValue || '', sheetRow: row };
 
   if (field === 'team') {
     const isNotAssigned = !newValue || newValue === config.DEFAULTS.TEAM;
     updates.agent = newValue || config.DEFAULTS.TEAM;
-    updates.stage = isNotAssigned ? config.STAGES.NOT_ASSIGNED : config.STAGES.AGENT_WORKING;
+    const newStage = isNotAssigned ?
+      config.STAGES.NOT_ASSIGNED : config.STAGES.AGENT_WORKING;
+    updates.stage = newStage;
+
+    // Auto-write stage value back to Stage cell in DSR sheet
+    if (!isNotAssigned && row) {
+      try {
+        const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+        const stageColIdx = colMap.map.pipelineStage;
+        if (stageColIdx !== undefined) {
+          await SheetService.updateContactCells(row, {
+            [stageColIdx]: newStage
+          });
+          console.log(`${LOG_PREFIX} Auto-set Stage cell to '${newStage}' on row ${row}`);
+        }
+      } catch (sheetErr) {
+        console.error(`${LOG_PREFIX} Failed to auto-set Stage cell: ${sheetErr.message}`);
+        // Non-fatal — Firestore still updated correctly
+      }
+    }
   }
 
   const historyEntry = {
@@ -111,11 +184,26 @@ async function processEdit(edit, editor) {
     details: buildHistoryDetails(field, oldValue, newValue)
   };
 
-  const result = await FirestoreService.updateLead(phone, updates, historyEntry);
-  if (!result) return { success: false, reason: 'update_failed' };
+  const updateResult = await FirestoreService.updateLead(phone, updates, historyEntry);
+  if (!updateResult) return { success: false, reason: 'update_failed' };
+
+  const result = { success: true, cgId: existing.data.cgId };
+
+  // If this was a valid stage transition needing routing, add routing info
+  if (field === 'pipelineStage') {
+    const routeConfig = config.SHEET_ROUTING[newValue];
+    if (routeConfig) {
+      result.needsRouting = true;
+      result.targetStage = newValue;
+      result.routeConfig = routeConfig;
+      result.phone = phone;
+      result.sourceRow = row;
+      console.log(`${LOG_PREFIX} ${existing.data.cgId}: stage → ${newValue} (routing pending)`);
+    }
+  }
 
   console.log(`${LOG_PREFIX} ${existing.data.cgId}: ${field} → "${(newValue || '').substring(0, 30)}"`);
-  return { success: true, cgId: existing.data.cgId };
+  return result;
 }
 
 
