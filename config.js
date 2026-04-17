@@ -233,6 +233,7 @@ module.exports = {
     CG_WEB: 'CGI_Web_Form',
     CRM_ENTRY: 'Manually_Entry',
     SHEET_EDIT: 'sheet_edit',
+    STAGE_TRANSITION: 'stage_transition',
     USER_LOGIN: 'user_login',
     MESSAGE: 'message',
   },
@@ -279,7 +280,7 @@ module.exports = {
     'unclaimed':      ['dead'],
     'agent_working':  ['sales_review', 'dead'],
     // Future stages (will be enabled in later rounds):
-    // 'sales_review':   ['payment_pending', 'dead'],
+    'sales_review':   ['payment_pending', 'dead'],
     // 'payment_pending': ['delivery', 'dead'],
     // 'delivery':       ['completed', 'dead'],
   },
