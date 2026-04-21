@@ -30,17 +30,20 @@ async function getSheets() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CACHE_TTL_MS = 5 * 60 * 1000;  // 5 minutes
-const _columnMapCache = {};  // keyed by sheetName
+const _columnMapCache = {};  // keyed by `${spreadsheetId}::${sheetName}`
 
-async function getColumnMap(sheetName) {
-  const cached = _columnMapCache[sheetName];
+async function getColumnMap(sheetName, spreadsheetId) {
+  spreadsheetId = spreadsheetId || config.SPREADSHEET_ID;
+  const cacheKey = `${spreadsheetId}::${sheetName}`;
+
+  const cached = _columnMapCache[cacheKey];
   if (cached && (Date.now() - cached.fetchedAt < CACHE_TTL_MS)) {
     return cached;
   }
 
   const api = await getSheets();
   const response = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
+    spreadsheetId: spreadsheetId,
     range: `${sheetName}!1:1`
   });
 
@@ -66,8 +69,8 @@ async function getColumnMap(sheetName) {
   }
 
   const result = { map, reverseMap, headerCount: headers.length, fetchedAt: Date.now() };
-  _columnMapCache[sheetName] = result;
-  console.log(`[Sheet] Column map cached for ${sheetName}: ${Object.keys(map).length} fields mapped`);
+  _columnMapCache[cacheKey] = result;
+  console.log(`[Sheet] Column map cached for ${cacheKey}: ${Object.keys(map).length} fields mapped`);
   return result;
 }
 
@@ -225,28 +228,29 @@ async function upsertContact(leadData) {
 //  @param {number} row    - Sheet row number
 //  @param {Object} fields - { [colIdx]: 'value', ... } — colIdx from getColumnMap()
 // ═════════════════════════════════════════════════════════════
-async function updateContactCells(row, fields) {
+async function updateContactCells(row, fields, spreadsheetId, tabName) {
   if (!row) throw new Error('updateContactCells: row is required');
+  spreadsheetId = spreadsheetId || config.SPREADSHEET_ID;
+  tabName = tabName || config.SHEETS.DSR;
 
   const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
 
   const updates = [];
   for (const [colIdx, value] of Object.entries(fields)) {
     if (value === undefined) continue;
     const letter = config.colLetter(parseInt(colIdx));
     updates.push({
-      range: `${sheetName}!${letter}${row}`,
+      range: `${tabName}!${letter}${row}`,
       values: [[value]]
     });
   }
 
   if (updates.length > 0) {
     await api.spreadsheets.values.batchUpdate({
-      spreadsheetId: config.SPREADSHEET_ID,
+      spreadsheetId: spreadsheetId,
       requestBody: { valueInputOption: 'RAW', data: updates }
     });
-    console.log(`[Sheet] Updated ${updates.length} cell(s) on row ${row}`);
+    console.log(`[Sheet] Updated ${updates.length} cell(s) on ${tabName} row ${row}`);
   }
 }
 
@@ -258,20 +262,22 @@ async function updateContactCells(row, fields) {
 //
 //  @returns {{ row: number, data: string[] }} or null
 // ═════════════════════════════════════════════════════════════
-async function findByPhone(phoneNumber) {
+async function findByPhone(phoneNumber, spreadsheetId, tabName) {
+  spreadsheetId = spreadsheetId || config.SPREADSHEET_ID;
+  tabName = tabName || config.SHEETS.DSR;
+
   const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
-  const colMap = await getColumnMap(sheetName);
+  const colMap = await getColumnMap(tabName, spreadsheetId);
 
   const phoneColIdx = colMap.map.number;
   if (phoneColIdx === undefined) {
-    throw new Error('findByPhone: "Mobile Number" header not found in sheet');
+    throw new Error(`findByPhone: "Mobile Number" header not found in ${tabName}`);
   }
 
   const phoneLetter = config.colLetter(phoneColIdx);
   const phoneResponse = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!${phoneLetter}2:${phoneLetter}`
+    spreadsheetId: spreadsheetId,
+    range: `${tabName}!${phoneLetter}2:${phoneLetter}`
   });
 
   const phoneCol = phoneResponse.data.values || [];
@@ -283,8 +289,8 @@ async function findByPhone(phoneNumber) {
 
       const lastLetter = config.colLetter(colMap.headerCount - 1);
       const rowResponse = await api.spreadsheets.values.get({
-        spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!A${matchedRow}:${lastLetter}${matchedRow}`
+        spreadsheetId: spreadsheetId,
+        range: `${tabName}!A${matchedRow}:${lastLetter}${matchedRow}`
       });
 
       const rowArray = (rowResponse.data.values && rowResponse.data.values[0]) || [];
@@ -554,21 +560,18 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  FORMAT ROW AS ARCHIVED — Strikeout + grey a row
+//  DELETE ROW FROM SHEET — physically removes a row
+//  (rows below shift up; row numbers for those rows become invalid)
 //
-//  Used when a lead transitions to another sheet.
-//  Visual indicator that the lead has moved on.
-//
-//  @param {string} spreadsheetId — source spreadsheet
-//  @param {string} tabName — source sheet tab name
-//  @param {number} row — 1-based row number to format
+//  @param {string} spreadsheetId
+//  @param {string} tabName
+//  @param {number} row — 1-based row number to delete
 // ═════════════════════════════════════════════════════════════
-async function formatRowAsArchived(spreadsheetId, tabName, row) {
+async function deleteRowFromSheet(spreadsheetId, tabName, row) {
   const api = await getSheets();
 
-  // Get the sheet's gid (sheetId) — needed for formatting requests
   const spreadsheet = await api.spreadsheets.get({
-    spreadsheetId: spreadsheetId,
+    spreadsheetId,
     fields: 'sheets.properties'
   });
 
@@ -576,101 +579,26 @@ async function formatRowAsArchived(spreadsheetId, tabName, row) {
     s => s.properties.title === tabName
   );
   if (!targetSheet) {
-    throw new Error(`formatRowAsArchived: Tab "${tabName}" not found`);
+    throw new Error(`deleteRowFromSheet: Tab "${tabName}" not found in spreadsheet ${spreadsheetId}`);
   }
-  const sheetId = targetSheet.properties.sheetId;
-
-  // Apply strikethrough + grey text + light grey background
-  await api.spreadsheets.batchUpdate({
-    spreadsheetId: spreadsheetId,
-    requestBody: {
-      requests: [
-        {
-          // Strikethrough text
-          repeatCell: {
-            range: {
-              sheetId: sheetId,
-              startRowIndex: row - 1,  // 0-based
-              endRowIndex: row,
-              startColumnIndex: 0,
-              endColumnIndex: 50,  // generous upper bound
-            },
-            cell: {
-              userEnteredFormat: {
-                textFormat: {
-                  strikethrough: true,
-                  foregroundColor: { red: 0.6, green: 0.6, blue: 0.6 },  // grey text
-                },
-                backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 },  // light grey bg
-              },
-            },
-            fields: 'userEnteredFormat(textFormat,backgroundColor)',
-          },
-        },
-      ],
-    },
-  });
-
-  console.log(`[Sheet] Row ${row} formatted as archived in ${tabName}`);
-}
-
-
-// ═════════════════════════════════════════════════════════════
-//  UN-ARCHIVE ROW — Remove strikeout + grey (restore normal)
-//
-//  Reverse of formatRowAsArchived. Used when a lead is
-//  rejected back to its original sheet.
-//
-//  @param {string} spreadsheetId — target spreadsheet
-//  @param {string} tabName — target sheet tab name
-//  @param {number} row — 1-based row number to restore
-// ═════════════════════════════════════════════════════════════
-async function unarchiveRow(spreadsheetId, tabName, row) {
-  const api = await getSheets();
-
-  const spreadsheet = await api.spreadsheets.get({
-    spreadsheetId: spreadsheetId,
-    fields: 'sheets.properties'
-  });
-
-  const targetSheet = spreadsheet.data.sheets.find(
-    s => s.properties.title === tabName
-  );
-  if (!targetSheet) {
-    throw new Error(`unarchiveRow: Tab "${tabName}" not found`);
-  }
-  const sheetId = targetSheet.properties.sheetId;
 
   await api.spreadsheets.batchUpdate({
-    spreadsheetId: spreadsheetId,
+    spreadsheetId,
     requestBody: {
-      requests: [
-        {
-          repeatCell: {
-            range: {
-              sheetId: sheetId,
-              startRowIndex: row - 1,
-              endRowIndex: row,
-              startColumnIndex: 0,
-              endColumnIndex: 50,
-            },
-            cell: {
-              userEnteredFormat: {
-                textFormat: {
-                  strikethrough: false,
-                  foregroundColor: { red: 0, green: 0, blue: 0 },  // black text
-                },
-                backgroundColor: { red: 1, green: 1, blue: 1 },  // white bg
-              },
-            },
-            fields: 'userEnteredFormat(textFormat,backgroundColor)',
-          },
-        },
-      ],
-    },
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: targetSheet.properties.sheetId,
+            dimension: 'ROWS',
+            startIndex: row - 1,  // 0-based inclusive
+            endIndex: row,         // 0-based exclusive
+          }
+        }
+      }]
+    }
   });
 
-  console.log(`[Sheet] Row ${row} un-archived in ${tabName}`);
+  console.log(`[Sheet] Row ${row} deleted from ${tabName}`);
 }
 
 
@@ -683,6 +611,5 @@ module.exports = {
   checkFirebaseWhitelist,
   updateAttendance,
   insertRowToSheet,
-  formatRowAsArchived,
-  unarchiveRow,
+  deleteRowFromSheet,
 };

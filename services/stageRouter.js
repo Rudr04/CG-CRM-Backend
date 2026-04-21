@@ -1,12 +1,16 @@
 // ============================================================================
-//  services/stageRouter.js — Cross-Sheet Stage Routing
+//  services/stageRouter.js — Cross-Sheet Stage Routing (delete + insert)
 //
-//  When a lead's stage changes, this service:
-//  1. Reads full lead data from Firestore (source of truth)
-//  2. Inserts a new row into the target sheet
-//  3. Strikes out + greys the source row in DSR
+//  On every stage transition:
+//    1. Compute source and target sheets from oldStage / targetStage via config.
+//    2. If source === target, no row movement is needed.
+//    3. If target has a sheet: fetch lead from Firestore, insert into target.
+//    4. If source has a sheet and sourceRow is known: delete the source row.
 //
-//  Called by syncHandler when result.needsRouting === true
+//  Order matters: insert BEFORE delete. If insert fails, we abort before
+//  deleting the source — better a failed transition than a lost lead. If
+//  delete fails after a successful insert, we log loudly but do not throw;
+//  a duplicate is recoverable, a disappearance is not.
 // ============================================================================
 
 const FirestoreService = require('./firestoreService');
@@ -17,119 +21,98 @@ const LOG_PREFIX = '[StageRouter]';
 
 
 /**
- * Route a lead to a target sheet after a stage transition.
+ * Move a lead across sheets on stage transition.
  *
- * @param {Object} routeInfo — from syncHandler result
- *   { phone, cgId, targetStage, routeConfig: { spreadsheetId, tabName }, sourceRow }
+ * @param {Object} routeInfo
+ *   @param {string} routeInfo.phone
+ *   @param {string} routeInfo.cgId
+ *   @param {string} routeInfo.oldStage
+ *   @param {string} routeInfo.targetStage
+ *   @param {number} [routeInfo.sourceRow]
+ *   @param {string} [routeInfo.sourceSpreadsheetId]
+ *   @param {string} [routeInfo.sourceTabName]
+ * @returns {Promise<Object>} { success, cgId, targetStage, action, insertedRow? }
  */
 async function routeLead(routeInfo) {
-  const { phone, cgId, targetStage, routeConfig, sourceRow, sourceSpreadsheetId, sourceTabName } = routeInfo;
+  const {
+    phone,
+    cgId,
+    oldStage,
+    targetStage,
+    sourceRow,
+    sourceSpreadsheetId,
+    sourceTabName,
+  } = routeInfo;
 
-  console.log(`${LOG_PREFIX} Routing ${cgId} → ${targetStage}`);
+  console.log(`${LOG_PREFIX} ${cgId}: ${oldStage} → ${targetStage}`);
 
-  // 1. Read full lead from Firestore (single source of truth)
-  const lead = await FirestoreService.findLeadByPhone(phone);
-  if (!lead) {
-    console.error(`${LOG_PREFIX} Lead not found in Firestore: ${phone}`);
-    return { success: false, reason: 'lead_not_found' };
+  const sourceSheet = config.getSheetForStage(oldStage);
+  const targetSheet = config.getSheetForStage(targetStage);
+
+  // ── Case A: same physical sheet on both sides. No row movement. ──
+  if (sourceSheet && targetSheet &&
+      sourceSheet.spreadsheetId === targetSheet.spreadsheetId &&
+      sourceSheet.tabName === targetSheet.tabName) {
+    console.log(`${LOG_PREFIX} Same sheet (${sourceSheet.tabName}) — no movement`);
+    return { success: true, cgId, targetStage, action: 'same_sheet' };
   }
 
-  const leadData = lead.data;
-
-  // 2. Determine if this is a forward or backward transition
-  const isForward = !!routeConfig;  // routeConfig exists = forward to new sheet
-  const isBackward = !routeConfig && targetStage === config.STAGES.AGENT_WORKING;
-
-  if (isForward) {
-    // ── Forward: insert into target sheet ──
-    console.log(`${LOG_PREFIX} Forward route → ${routeConfig.tabName} (${routeConfig.spreadsheetId})`);
+  // ── Case B: target has a sheet — insert first. ──
+  let insertedRow = null;
+  if (targetSheet) {
+    const lead = await FirestoreService.findLeadByPhone(phone);
+    if (!lead) {
+      console.error(`${LOG_PREFIX} Lead not found in Firestore: ${phone}`);
+      return { success: false, reason: 'lead_not_found' };
+    }
 
     try {
-      const insertResult = await SheetService.insertRowToSheet(
-        routeConfig.spreadsheetId,
-        routeConfig.tabName,
-        leadData
+      const result = await SheetService.insertRowToSheet(
+        targetSheet.spreadsheetId,
+        targetSheet.tabName,
+        lead.data
       );
-      console.log(`${LOG_PREFIX} Inserted into ${targetStage} sheet, row ${insertResult.row}`);
+      insertedRow = result.row;
+      console.log(`${LOG_PREFIX} Inserted into ${targetSheet.tabName} at row ${insertedRow}`);
     } catch (insertErr) {
       console.error(`${LOG_PREFIX} Insert failed: ${insertErr.message}`);
+      // Abort before deleting source — do not risk losing the lead.
       throw insertErr;
     }
-
-    // Archive source row
-    if (sourceRow && sourceSpreadsheetId && sourceTabName) {
-      try {
-        await SheetService.formatRowAsArchived(sourceSpreadsheetId, sourceTabName, sourceRow);
-        console.log(`${LOG_PREFIX} Archived row ${sourceRow} in ${sourceTabName}`);
-      } catch (fmtErr) {
-        console.error(`${LOG_PREFIX} Archive failed (non-fatal): ${fmtErr.message}`);
-      }
-    } else if (sourceRow) {
-      // Fallback: assume DSR if no source info provided
-      try {
-        await SheetService.formatRowAsArchived(config.SPREADSHEET_ID, config.SHEETS.DSR, sourceRow);
-        console.log(`${LOG_PREFIX} Archived row ${sourceRow} in DSR (fallback)`);
-      } catch (fmtErr) {
-        console.error(`${LOG_PREFIX} Archive failed (non-fatal): ${fmtErr.message}`);
-      }
-    }
-
-  } else if (isBackward) {
-    // ── Backward: un-archive original DSR row ──
-    const dsrRow = leadData.sheetRow;
-    if (!dsrRow) {
-      console.warn(`${LOG_PREFIX} No sheetRow in Firestore — cannot un-archive DSR row`);
-    } else {
-      try {
-        await SheetService.unarchiveRow(config.SPREADSHEET_ID, config.SHEETS.DSR, dsrRow);
-        console.log(`${LOG_PREFIX} Un-archived DSR row ${dsrRow}`);
-      } catch (unarchiveErr) {
-        console.error(`${LOG_PREFIX} Un-archive failed (non-fatal): ${unarchiveErr.message}`);
-      }
-    }
-
-    // Also update the Stage cell in DSR to reflect the new stage
-    if (dsrRow) {
-      try {
-        const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
-        const stageColIdx = colMap.map.pipelineStage;
-        if (stageColIdx !== undefined) {
-          await SheetService.updateContactCells(dsrRow, {
-            [stageColIdx]: targetStage
-          });
-          console.log(`${LOG_PREFIX} Updated DSR Stage cell to '${targetStage}' on row ${dsrRow}`);
-        }
-      } catch (cellErr) {
-        console.error(`${LOG_PREFIX} Stage cell update failed (non-fatal): ${cellErr.message}`);
-      }
-    }
-
-    // Archive source row in Sales Review (or wherever it came from)
-    if (sourceRow && sourceSpreadsheetId && sourceTabName) {
-      try {
-        await SheetService.formatRowAsArchived(sourceSpreadsheetId, sourceTabName, sourceRow);
-        console.log(`${LOG_PREFIX} Archived row ${sourceRow} in ${sourceTabName}`);
-      } catch (fmtErr) {
-        console.error(`${LOG_PREFIX} Archive source failed (non-fatal): ${fmtErr.message}`);
-      }
-    }
-
   } else {
-    // No routing needed (e.g., transition to 'dead')
-    console.log(`${LOG_PREFIX} No sheet routing for '${targetStage}' — Firestore only`);
-
-    // Archive source row if available
-    if (sourceRow && sourceSpreadsheetId && sourceTabName) {
-      try {
-        await SheetService.formatRowAsArchived(sourceSpreadsheetId, sourceTabName, sourceRow);
-        console.log(`${LOG_PREFIX} Archived row ${sourceRow} in ${sourceTabName}`);
-      } catch (fmtErr) {
-        console.error(`${LOG_PREFIX} Archive failed (non-fatal): ${fmtErr.message}`);
-      }
-    }
+    console.log(`${LOG_PREFIX} Target stage '${targetStage}' has no sheet — skipping insert`);
   }
 
-  return { success: true, cgId: leadData.cgId, targetStage, direction: isForward ? 'forward' : isBackward ? 'backward' : 'terminal' };
+  // ── Case C: delete from source. Runs only after successful insert (if any). ──
+  const delSpreadsheetId =
+    sourceSpreadsheetId || (sourceSheet && sourceSheet.spreadsheetId);
+  const delTabName =
+    sourceTabName || (sourceSheet && sourceSheet.tabName);
+
+  if (sourceRow && delSpreadsheetId && delTabName) {
+    try {
+      await SheetService.deleteRowFromSheet(delSpreadsheetId, delTabName, sourceRow);
+      console.log(`${LOG_PREFIX} Deleted source row ${sourceRow} from ${delTabName}`);
+    } catch (delErr) {
+      console.error(
+        `${LOG_PREFIX} DELETE FAILED — lead may be duplicated in ${delTabName} row ${sourceRow}: ${delErr.message}`
+      );
+      // Do not throw. Manual cleanup is possible; a thrown error here would
+      // mask a successful insert and trigger retries that duplicate further.
+    }
+  } else {
+    console.log(
+      `${LOG_PREFIX} No source delete performed (sourceRow=${sourceRow}, sheet=${delTabName || 'unknown'})`
+    );
+  }
+
+  return {
+    success: true,
+    cgId,
+    targetStage,
+    action: targetSheet ? 'moved' : 'deleted_only',
+    insertedRow,
+  };
 }
 
 

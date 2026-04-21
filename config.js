@@ -296,3 +296,34 @@ module.exports = {
     // 'delivery':        { spreadsheetId: '...', tabName: 'Sheet1' },
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STAGE → SHEET MAP
+//  Pure function: every stage knows which sheet its leads live in.
+//  Computed after module.exports so it can reference SPREADSHEET_ID, SHEETS,
+//  SHEET_ROUTING, and STAGES from the exports object.
+// ═══════════════════════════════════════════════════════════════════════════
+
+module.exports.STAGE_TO_SHEET = {
+  [module.exports.STAGES.NOT_ASSIGNED]:
+    { spreadsheetId: module.exports.SPREADSHEET_ID, tabName: module.exports.SHEETS.DSR },
+  [module.exports.STAGES.AGENT_WORKING]:
+    { spreadsheetId: module.exports.SPREADSHEET_ID, tabName: module.exports.SHEETS.DSR },
+  [module.exports.STAGES.SALES_REVIEW]:
+    module.exports.SHEET_ROUTING['sales_review'] || null,
+  [module.exports.STAGES.PAYMENT_PENDING]:
+    module.exports.SHEET_ROUTING['payment_pending'] || null,
+  [module.exports.STAGES.DELIVERY]:
+    module.exports.SHEET_ROUTING['delivery'] || null,
+  [module.exports.STAGES.COMPLETED]: null,
+  [module.exports.STAGES.DEAD]:      null,
+};
+
+/**
+ * Returns the sheet config for a given stage, or null if the stage has no sheet.
+ * @param {string} stage — one of the STAGES values
+ * @returns {{spreadsheetId: string, tabName: string}|null}
+ */
+module.exports.getSheetForStage = function(stage) {
+  return module.exports.STAGE_TO_SHEET[stage] || null;
+};

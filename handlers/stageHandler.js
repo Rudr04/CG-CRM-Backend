@@ -49,13 +49,18 @@ async function handleStageTransition(params) {
     // Revert the cell to current stage
     if (sourceRow) {
       try {
-        const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+        const revertSpreadsheetId = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
+        const revertTabName       = params.sourceTabName       || config.SHEETS.DSR;
+        const colMap = await SheetService.getColumnMap(revertTabName, revertSpreadsheetId);
         const stageColIdx = colMap.map.pipelineStage;
         if (stageColIdx !== undefined) {
-          await SheetService.updateContactCells(sourceRow, {
-            [stageColIdx]: currentStage
-          });
-          console.log(`${LOG_PREFIX} Reverted Stage cell to '${currentStage}' on row ${sourceRow}`);
+          await SheetService.updateContactCells(
+            sourceRow,
+            { [stageColIdx]: currentStage },
+            revertSpreadsheetId,
+            revertTabName
+          );
+          console.log(`${LOG_PREFIX} Reverted Stage cell to '${currentStage}' on ${revertTabName} row ${sourceRow}`);
         }
       } catch (revertErr) {
         console.error(`${LOG_PREFIX} Failed to revert: ${revertErr.message}`);
@@ -71,7 +76,11 @@ async function handleStageTransition(params) {
     };
   }
 
-  // 4. Valid transition — update Firestore
+  // 4. Valid transition — update Firestore.
+  //    sheetRow is intentionally NOT written here. It remains useful for the
+  //    DSR upsert path (writeBoth.js maintains it), but it is unreliable across
+  //    cross-sheet transitions since row numbers shift on delete/insert.
+  //    stageRouter no longer reads it.
   console.log(`${LOG_PREFIX} Valid: ${currentStage} → ${newStage}`);
 
   const historyEntry = {
@@ -83,51 +92,30 @@ async function handleStageTransition(params) {
   await FirestoreService.updateLead(phone, {
     stage: newStage,
     pipelineStage: newStage,
-    sheetRow: sourceRow || existing.data.sheetRow,
   }, historyEntry);
 
   console.log(`${LOG_PREFIX} Firestore updated: ${existing.data.cgId} → ${newStage}`);
 
-  // 5. Route — forward transitions (to new sheet) and backward transitions (return to DSR)
-  const routeConfig = config.SHEET_ROUTING[newStage];
-  const needsRouting = !!routeConfig || newStage === config.STAGES.AGENT_WORKING;
-
-  if (needsRouting) {
-    try {
-      const routeResult = await stageRouter.routeLead({
-        phone,
-        cgId: existing.data.cgId,
-        targetStage: newStage,
-        routeConfig: routeConfig || null,
-        sourceRow,
-        sourceSpreadsheetId: params.sourceSpreadsheetId || config.SPREADSHEET_ID,
-        sourceTabName: params.sourceTabName || config.SHEETS.DSR,
-      });
-      console.log(`${LOG_PREFIX} Routed ${existing.data.cgId}: ${JSON.stringify(routeResult)}`);
-    } catch (routeErr) {
-      console.error(`${LOG_PREFIX} Routing failed: ${routeErr.message}`);
-    }
-  } else {
-    console.log(`${LOG_PREFIX} No routing for '${newStage}' — Firestore only`);
-
-    // Still archive source row for terminal transitions (dead)
-    if (sourceRow) {
-      try {
-        const srcSpreadsheet = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
-        const srcTab = params.sourceTabName || config.SHEETS.DSR;
-        await SheetService.formatRowAsArchived(srcSpreadsheet, srcTab, sourceRow);
-        console.log(`${LOG_PREFIX} Archived source row ${sourceRow}`);
-      } catch (fmtErr) {
-        console.error(`${LOG_PREFIX} Archive failed (non-fatal): ${fmtErr.message}`);
-      }
-    }
+  // 5. Route — stageRouter handles same-sheet, cross-sheet, and terminal cases.
+  try {
+    const routeResult = await stageRouter.routeLead({
+      phone,
+      cgId:                existing.data.cgId,
+      oldStage:            currentStage,
+      targetStage:         newStage,
+      sourceRow,
+      sourceSpreadsheetId: params.sourceSpreadsheetId || config.SPREADSHEET_ID,
+      sourceTabName:       params.sourceTabName       || config.SHEETS.DSR,
+    });
+    console.log(`${LOG_PREFIX} Routed ${existing.data.cgId}: ${JSON.stringify(routeResult)}`);
+  } catch (routeErr) {
+    console.error(`${LOG_PREFIX} Routing failed: ${routeErr.message}`);
   }
 
   return {
     success: true,
     cgId: existing.data.cgId,
     transition: `${currentStage} → ${newStage}`,
-    routed: !!routeConfig,
   };
 }
 
