@@ -197,9 +197,19 @@ async function createLead(leadData) {
     paymentRefId: '',
     dateOfPayment: '',
     receivedAccount: '',
-    deliveryStatus: '',
-    deliveryDate: '',
-    deliveryRemark: '',
+    fulfillmentStatus: '',
+    fulfillmentDate: '',
+    fulfillmentRemark: '',
+    // Added Part 3A for Phase 3 Payment + Fulfillment.
+    // NOTE: these are NOT backfilled on existing leads — reads must defensively
+    // default (e.g. `lead.discount || ''`) rather than assume presence.
+    discount: '',
+    finalPrice: '',
+    paymentStatus: '',
+    fullyPaid: '',
+    fulfillmentType: '',
+    batchOrSlot: '',
+    consultant: '',
     createdAt: now,
     updatedAt: now,
     sheetRow: leadData.sheetRow || null,
@@ -297,7 +307,7 @@ async function createOrUpdateLead(leadData, historyEntry) {
       'salesRemark', 'approvalDate',
       'quantity', 'productPrice', 'amountPaid', 'pendingAmount',
       'modeOfPay', 'paymentRefId', 'dateOfPayment', 'receivedAccount',
-      'deliveryStatus', 'deliveryDate', 'deliveryRemark',
+      'fulfillmentStatus', 'fulfillmentDate', 'fulfillmentRemark',
     ];
 
     for (const field of overwriteFields) {

@@ -115,9 +115,17 @@ const FIELD_HEADERS = {
   paymentRefId:    'Payment Ref. ID',
   dateOfPayment:   'Date of Payment',
   receivedAccount: 'Received Account',
-  deliveryStatus:  'Delivery Status',
-  deliveryDate:    'Delivery Date',
-  deliveryRemark:  'Delivery Remark',
+  fulfillmentStatus: 'Fulfillment Status',
+  fulfillmentDate:   'Fulfillment Date',
+  fulfillmentRemark: 'Fulfillment Remark',
+  // Added in Part 3A for Phase 3 Payment + Fulfillment sheets (wired in 3B)
+  discount:          'Discount',
+  finalPrice:        'Final Price',
+  paymentStatus:     'Payment Status',
+  fullyPaid:         'Fully Paid',
+  fulfillmentType:   'Fulfillment Type',
+  batchOrSlot:       'Batch / Slot',
+  consultant:        'Consultant',
 };
 
 // Reverse map: header text → field key
@@ -144,8 +152,8 @@ const TRACKED_FIELDS = {
   pipelineStage: { firestoreField: 'pipelineStage',  historyAction: 'stage_changed' },
   // Phase 3
   salesRemark:     { firestoreField: 'salesRemark',     historyAction: 'sales_remark_added' },
-  deliveryStatus:  { firestoreField: 'deliveryStatus',  historyAction: 'delivery_status_changed' },
-  deliveryRemark:  { firestoreField: 'deliveryRemark',  historyAction: 'delivery_remark_added' },
+  fulfillmentStatus: { firestoreField: 'fulfillmentStatus', historyAction: 'fulfillment_status_changed' },
+  fulfillmentRemark: { firestoreField: 'fulfillmentRemark', historyAction: 'fulfillment_remark_added' },
 };
 
 // Auto-generated lookup maps
@@ -215,13 +223,13 @@ module.exports = {
 
   // ─── Pipeline Stages ──────────────────────────────────────────────────────
   STAGES: {
-    NOT_ASSIGNED: 'unclaimed',
+    NOT_ASSIGNED:  'unclaimed',
     AGENT_WORKING: 'agent_working',
-    SALES_REVIEW: 'sales_review',
-    PAYMENT_PENDING: 'payment_pending',
-    DELIVERY: 'delivery',
-    COMPLETED: 'completed',
-    DEAD: 'dead'
+    SALES_REVIEW:  'sales_review',
+    PAYMENT:       'payment',
+    FULFILLMENT:   'fulfillment',
+    COMPLETED:     'completed',
+    DEAD:          'dead'
   },
 
   // ─── Event Types (webhook routing) ────────────────────────────────────────
@@ -279,9 +287,10 @@ module.exports = {
   STAGE_TRANSITIONS: {
     'unclaimed':      ['dead'],
     'agent_working':  ['sales_review', 'dead'],
-    'sales_review':   ['payment_pending', 'agent_working', 'dead'],
-    // 'payment_pending': ['delivery', 'dead'],
-    // 'delivery':       ['completed', 'dead'],
+    'sales_review':   ['payment', 'agent_working', 'dead'],
+    // Expanded in Part 3B when Payment and Fulfillment sheets come online:
+    // 'payment':     ['fulfillment', 'sales_review', 'dead'],
+    // 'fulfillment': ['completed', 'dead'],
   },
 
   // ─── Sheet Routing ────────────────────────────────────────────────────────
@@ -291,9 +300,9 @@ module.exports = {
       spreadsheetId: '1Kiw7dB0qedZxJ5VcqL5IDekZLPN-HaeCYSSbbTkwcZ8',
       tabName: 'Sheet1',
     },
-    // Future sheets (will be added in later rounds):
-    // 'payment_pending': { spreadsheetId: '...', tabName: 'Sheet1' },
-    // 'delivery':        { spreadsheetId: '...', tabName: 'Sheet1' },
+    // Added in Part 3B:
+    // 'payment':     { spreadsheetId: '...', tabName: 'Payment' },
+    // 'fulfillment': { spreadsheetId: '...', tabName: 'Fulfillment' },
   },
 };
 
@@ -311,10 +320,10 @@ module.exports.STAGE_TO_SHEET = {
     { spreadsheetId: module.exports.SPREADSHEET_ID, tabName: module.exports.SHEETS.DSR },
   [module.exports.STAGES.SALES_REVIEW]:
     module.exports.SHEET_ROUTING['sales_review'] || null,
-  [module.exports.STAGES.PAYMENT_PENDING]:
-    module.exports.SHEET_ROUTING['payment_pending'] || null,
-  [module.exports.STAGES.DELIVERY]:
-    module.exports.SHEET_ROUTING['delivery'] || null,
+  [module.exports.STAGES.PAYMENT]:
+    module.exports.SHEET_ROUTING['payment'] || null,
+  [module.exports.STAGES.FULFILLMENT]:
+    module.exports.SHEET_ROUTING['fulfillment'] || null,
   [module.exports.STAGES.COMPLETED]: null,
   [module.exports.STAGES.DEAD]:      null,
 };

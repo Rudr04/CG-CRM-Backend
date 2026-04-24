@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\\\\src\")"
+      "Bash(ls -la \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\\\\src\")",
+      "Bash(node -c scripts/migrate-3a-rename.js)",
+      "Bash(node -e \"require\\('./handlers/stageHandler'\\); require\\('./services/stageRouter'\\); require\\('./config'\\); console.log\\('OK'\\);\")"
     ]
   }
 }

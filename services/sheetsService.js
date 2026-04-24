@@ -513,9 +513,9 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     paymentRefId:   'paymentRefId',
     dateOfPayment:  'dateOfPayment',
     receivedAccount:'receivedAccount',
-    deliveryStatus: 'deliveryStatus',
-    deliveryDate:   'deliveryDate',
-    deliveryRemark: 'deliveryRemark',
+    fulfillmentStatus: 'fulfillmentStatus',
+    fulfillmentDate:   'fulfillmentDate',
+    fulfillmentRemark: 'fulfillmentRemark',
   };
 
   const set = (fieldKey, value) => {
