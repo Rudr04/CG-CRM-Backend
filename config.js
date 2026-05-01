@@ -122,6 +122,7 @@ const FIELD_HEADERS = {
   discount:          'Discount',
   finalPrice:        'Final Price',
   paymentStatus:     'Payment Status',
+  paymentRemark:     'Payment Remark',
   fullyPaid:         'Fully Paid',
   fulfillmentType:   'Fulfillment Type',
   batchOrSlot:       'Batch / Slot',
@@ -288,9 +289,8 @@ module.exports = {
     'unclaimed':      ['dead'],
     'agent_working':  ['sales_review', 'dead'],
     'sales_review':   ['payment', 'agent_working', 'dead'],
-    // Expanded in Part 3B when Payment and Fulfillment sheets come online:
-    // 'payment':     ['fulfillment', 'sales_review', 'dead'],
-    // 'fulfillment': ['completed', 'dead'],
+    'payment':        ['fulfillment', 'sales_review', 'dead'],
+    'fulfillment':    ['completed', 'dead'],
   },
 
   // ─── Sheet Routing ────────────────────────────────────────────────────────
@@ -300,9 +300,14 @@ module.exports = {
       spreadsheetId: '1Kiw7dB0qedZxJ5VcqL5IDekZLPN-HaeCYSSbbTkwcZ8',
       tabName: 'Sheet1',
     },
-    // Added in Part 3B:
-    // 'payment':     { spreadsheetId: '...', tabName: 'Payment' },
-    // 'fulfillment': { spreadsheetId: '...', tabName: 'Fulfillment' },
+    'payment': {
+      spreadsheetId: '1wxnMYorziRoln6DT7YOSbb4dL5-c2yALYYet0zq4Gtk',
+      tabName: 'Payments',
+    },
+    'fulfillment': {
+      spreadsheetId: '1B7LvXJ-UZ4c4ltuzlk6HKGpNpCBBgUu_eaEaVZC5_us',
+      tabName: 'Fulfillment',
+    },
   },
 };
 

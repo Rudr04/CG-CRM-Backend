@@ -206,6 +206,7 @@ async function createLead(leadData) {
     discount: '',
     finalPrice: '',
     paymentStatus: '',
+    paymentRemark: '',
     fullyPaid: '',
     fulfillmentType: '',
     batchOrSlot: '',
