@@ -172,15 +172,15 @@ async function createLead(leadData) {
     localNumber: countryInfo.localNumber,
     name: cleanString(leadData.name || leadData.senderName),
     email: cleanString(leadData.email),
-    stage: (!leadData.team || leadData.team === config.DEFAULTS.TEAM)
-      ? config.STAGES.NOT_ASSIGNED
-      : config.STAGES.AGENT_WORKING,
     status: leadData.status || config.DEFAULTS.STATUS,
     agent: leadData.team || config.DEFAULTS.TEAM,
     location: cleanString(leadData.location),
     inquiry: leadData.inquiry || config.DEFAULTS.INQUIRY,
     product: cleanString(leadData.product),
-    pipelineStage: leadData.pipelineStage || '',
+    pipelineStage: leadData.pipelineStage
+      || ((!leadData.team || leadData.team === config.DEFAULTS.TEAM)
+          ? config.STAGES.NOT_ASSIGNED
+          : config.STAGES.AGENT_WORKING),
     source: cleanString(leadData.source),
     message: cleanString(leadData.message),
     remark: cleanString(leadData.remark),

@@ -240,7 +240,7 @@ async function handleCommunityJoin(params) {
   const assignRobo  = currentTeam === config.DEFAULTS.TEAM;
 
   const fsUpdates = { status: newStatus };
-  if (assignRobo) { fsUpdates.agent = config.DEFAULTS.ROBO_AGENT; fsUpdates.stage = config.DEFAULTS.ROBO_AGENT; }
+  if (assignRobo) { fsUpdates.agent = config.DEFAULTS.ROBO_AGENT; fsUpdates.pipelineStage = config.DEFAULTS.ROBO_AGENT; }
 
   const customFirestore = async () => {
     await FirestoreService.updateLead(phone, fsUpdates, {

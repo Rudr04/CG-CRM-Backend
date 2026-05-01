@@ -105,7 +105,7 @@ async function processEdit(edit, editor) {
     updates.agent = newValue || config.DEFAULTS.TEAM;
     const newStage = isNotAssigned ?
       config.STAGES.NOT_ASSIGNED : config.STAGES.AGENT_WORKING;
-    updates.stage = newStage;
+    updates.pipelineStage = newStage;
 
     // Auto-write stage value back to Stage cell in DSR sheet
     if (!isNotAssigned && row) {

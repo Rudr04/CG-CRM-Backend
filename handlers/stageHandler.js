@@ -39,7 +39,8 @@ async function handleStageTransition(params) {
   }
 
   // 2. Determine current stage from Firestore (source of truth, not the old cell value)
-  const currentStage = existing.data.stage || existing.data.pipelineStage || config.STAGES.NOT_ASSIGNED;
+  // TEMP: fallback to .stage for pre-migration docs. Remove after migrate-stage-collapse.js has run.
+  const currentStage = existing.data.pipelineStage || existing.data.stage || config.STAGES.NOT_ASSIGNED;
 
   // 3. Validate transition
   const allowedTargets = config.STAGE_TRANSITIONS[currentStage] || [];
@@ -90,7 +91,6 @@ async function handleStageTransition(params) {
   };
 
   await FirestoreService.updateLead(phone, {
-    stage: newStage,
     pipelineStage: newStage,
   }, historyEntry);
 
