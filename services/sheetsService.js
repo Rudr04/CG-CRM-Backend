@@ -181,7 +181,7 @@ async function upsertContact(leadData) {
       if (M[fieldKey] !== undefined) rowData[M[fieldKey]] = value;
     };
 
-    set('cgid',     `=ROW()-1+${config.DEFAULTS.SERIAL_OFFSET}`);
+    set('cgid',     leadData.cgId || `=ROW()-1+${config.DEFAULTS.SERIAL_OFFSET}`);
     set('date',     date);
     set('time',     time);
     set('name',     name);

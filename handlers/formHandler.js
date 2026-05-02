@@ -26,6 +26,10 @@ async function handleFormSubmission(params) {
 
   const whitelistPhone = formNum || phone;
 
+  // Shared across firestore + sheet closures so the actual CGID flows from
+  // the Firestore write into the Sheet write (instead of a row-1 formula).
+  let cgId = null;
+
   // Custom Firestore write (whitelist + lead in one closure)
   const customFirestoreWrite = async () => {
     const errors = [];
@@ -39,12 +43,13 @@ async function handleFormSubmission(params) {
 
     // Firestore lead record
     try {
-      await FirestoreService.createOrUpdateLead({
+      const result = await FirestoreService.createOrUpdateLead({
         phone, name, regiNo: formNum, status: statusValue, inquiry: config.DEFAULTS.INQUIRY,
       }, {
         action: 'form_submitted', by: 'system',
         details: { formNum, option, statusValue }
       });
+      if (result?.cgId) cgId = result.cgId;
     } catch (e) { errors.push(`firestore: ${e.message}`); }
 
     if (errors.length) throw new Error(errors.join('; '));
@@ -53,7 +58,7 @@ async function handleFormSubmission(params) {
   // Custom Sheet write (upsert + cell updates)
   const customSheetWrite = async () => {
     const upsertResult = await SheetService.upsertContact({
-      phone, name, source: 'WhatsApp',
+      phone, name, cgId, source: 'WhatsApp',
       remark: `Form submitted: ${option}`, inquiry: config.DEFAULTS.INQUIRY,
     });
     const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
