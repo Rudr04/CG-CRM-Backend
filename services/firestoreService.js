@@ -172,6 +172,8 @@ async function createLead(leadData) {
     localNumber: countryInfo.localNumber,
     name: cleanString(leadData.name || leadData.senderName),
     email: cleanString(leadData.email),
+    date: '',
+    time: '',
     status: leadData.status || config.DEFAULTS.STATUS,
     agent: leadData.team || config.DEFAULTS.TEAM,
     location: cleanString(leadData.location),
@@ -197,6 +199,7 @@ async function createLead(leadData) {
     paymentRefId: '',
     dateOfPayment: '',
     receivedAccount: '',
+    paymentRemark: '',
     fulfillmentStatus: '',
     fulfillmentDate: '',
     fulfillmentRemark: '',
@@ -206,7 +209,6 @@ async function createLead(leadData) {
     discount: '',
     finalPrice: '',
     paymentStatus: '',
-    paymentRemark: '',
     fullyPaid: '',
     fulfillmentType: '',
     batchOrSlot: '',
@@ -222,9 +224,10 @@ async function createLead(leadData) {
     }]
   };
 
-  const docRef = await firestore.collection(COLLECTION).add(doc);
-  console.log(`${LOG_PREFIX} Lead created: ${cgId} (${docRef.id})`);
-  return { docId: docRef.id, cgId, created: true };
+  const docRef = firestore.collection(COLLECTION).doc(cgId);
+  await docRef.set(doc);
+  console.log(`${LOG_PREFIX} Lead created: ${cgId} (docId=${cgId})`);
+  return { docId: cgId, cgId, created: true };
   // Firestore errors throw naturally → caught by buildWriteBoth → PendingQueue retries
 }
 
