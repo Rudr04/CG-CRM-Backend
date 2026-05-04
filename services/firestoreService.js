@@ -162,6 +162,7 @@ async function createLead(leadData) {
   const cgId = await getNextCgId();
   const now = nowISO();
   const countryInfo = extractCountryInfo(phone);
+  const opts = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
   const time = new Intl.DateTimeFormat('en-IN', opts).format(now);
   const date = formatDate(now);
 
