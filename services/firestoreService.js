@@ -162,8 +162,6 @@ async function createLead(leadData) {
   const cgId = await getNextCgId();
   const now = nowISO();
   const countryInfo = extractCountryInfo(phone);
-  const opts = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-  const time = new Intl.DateTimeFormat('en-IN', opts).format(now);
   const date = formatDate(now);
 
   const doc = {
@@ -176,7 +174,7 @@ async function createLead(leadData) {
     name: cleanString(leadData.name || leadData.senderName),
     email: cleanString(leadData.email),
     date: date,
-    time: time,
+    time: now.getTime(),  // store as timestamp for easier querying/sorting; format in Sheets
     status: leadData.status || config.DEFAULTS.STATUS,
     agent: leadData.team || config.DEFAULTS.TEAM,
     location: cleanString(leadData.location),
