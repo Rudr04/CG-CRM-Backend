@@ -8,7 +8,7 @@
 const admin = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const config = require('../config');
-const { normalizePhone, cleanString, nowISO } = require('../utils/helpers');
+const { normalizePhone, cleanString, nowISO,formatDate } = require('../utils/helpers');
 
 const LOG_PREFIX = '[Firestore]';
 
@@ -162,6 +162,8 @@ async function createLead(leadData) {
   const cgId = await getNextCgId();
   const now = nowISO();
   const countryInfo = extractCountryInfo(phone);
+  const time = new Intl.DateTimeFormat('en-IN', opts).format(now);
+  const date = formatDate(now);
 
   const doc = {
     cgId,
@@ -172,8 +174,8 @@ async function createLead(leadData) {
     localNumber: countryInfo.localNumber,
     name: cleanString(leadData.name || leadData.senderName),
     email: cleanString(leadData.email),
-    date: '',
-    time: '',
+    date: date,
+    time: time,
     status: leadData.status || config.DEFAULTS.STATUS,
     agent: leadData.team || config.DEFAULTS.TEAM,
     location: cleanString(leadData.location),

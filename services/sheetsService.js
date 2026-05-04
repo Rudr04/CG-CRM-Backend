@@ -502,6 +502,8 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     remark:         'remark',
     cbDate:         'cbDate',
     pipelineStage:  'pipelineStage',
+    scholarship:    'scholarship',
+    installment:    'installment',
     // Phase 3 fields
     salesRemark:    'salesRemark',
     approvalDate:   'approvalDate',

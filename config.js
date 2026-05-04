@@ -104,6 +104,8 @@ const FIELD_HEADERS = {
   hours:         'Hours',
   converted:     'Converted',
   pipelineStage: 'Pipeline Stage',
+  scholarship:     'Scholarship',
+  installment:     'Installment',
   // Phase 3 fields (will exist on other sheets later)
   salesRemark:     'Sales Remark',
   approvalDate:    'Approval Date',
@@ -151,6 +153,8 @@ const TRACKED_FIELDS = {
   rating:        { firestoreField: 'rating',         historyAction: 'rating_changed' },
   remark:        { firestoreField: 'remark',         historyAction: 'remark_added' },
   pipelineStage: { firestoreField: 'pipelineStage',  historyAction: 'stage_changed' },
+  scholarship:     { firestoreField: 'scholarship',   historyAction: 'scholarship_updated' },
+  installment:     { firestoreField: 'installment',    historyAction: 'installment_updated' },
   // Phase 3
   salesRemark:     { firestoreField: 'salesRemark',     historyAction: 'sales_remark_added' },
   fulfillmentStatus: { firestoreField: 'fulfillmentStatus', historyAction: 'fulfillment_status_changed' },
@@ -291,6 +295,16 @@ module.exports = {
     'sales_review':   ['payment', 'agent_working', 'dead'],
     'payment':        ['fulfillment', 'sales_review', 'dead'],
     'fulfillment':    ['completed', 'dead'],
+  },
+
+  // ─── Transition Requirements ────────────────────────────────────────────
+  // Mandatory fields for each stage transition. Checked by stageHandler
+  // as a safety net — primary enforcement is the GAS form.
+  TRANSITION_REQUIREMENTS: {
+    'agent_working→sales_review': {
+      required: ['amountPaid', 'modeOfPay'],
+      description: 'Payment evidence required before sales review',
+    },
   },
 
   // ─── Sheet Routing ────────────────────────────────────────────────────────

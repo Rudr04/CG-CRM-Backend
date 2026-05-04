@@ -77,6 +77,56 @@ async function handleStageTransition(params) {
     };
   }
 
+  // 3b. Readiness check — safety net for transitions that require form data.
+  //     Primary enforcement is the GAS form; this catches direct CF calls
+  //     that bypass the form.
+  const transitionKey = `${currentStage}→${newStage}`;
+  const requirements = config.TRANSITION_REQUIREMENTS && config.TRANSITION_REQUIREMENTS[transitionKey];
+
+  if (requirements) {
+    const formData = params.formData || {};
+    const missingFields = [];
+
+    for (const fieldKey of requirements.required) {
+      const value = formData[fieldKey];
+      if (value === undefined || value === null || value === '' ||
+          (typeof value === 'number' && value <= 0)) {
+        missingFields.push(fieldKey);
+      }
+    }
+
+    if (missingFields.length > 0) {
+      console.warn(`${LOG_PREFIX} BLOCKED (missing form data): [${missingFields.join(', ')}] for ${transitionKey}`);
+
+      if (sourceRow) {
+        try {
+          const revertSpreadsheetId = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
+          const revertTabName       = params.sourceTabName       || config.SHEETS.DSR;
+          const colMap = await SheetService.getColumnMap(revertTabName, revertSpreadsheetId);
+          const stageColIdx = colMap.map.pipelineStage;
+          if (stageColIdx !== undefined) {
+            await SheetService.updateContactCells(
+              sourceRow,
+              { [stageColIdx]: currentStage },
+              revertSpreadsheetId,
+              revertTabName
+            );
+          }
+        } catch (revertErr) {
+          console.error(`${LOG_PREFIX} Revert failed: ${revertErr.message}`);
+        }
+      }
+
+      return {
+        success: false,
+        reason: 'missing_required_fields',
+        transition: transitionKey,
+        missingFields,
+        description: requirements.description,
+      };
+    }
+  }
+
   // 4. Valid transition — update Firestore.
   //    sheetRow is intentionally NOT written here. It remains useful for the
   //    DSR upsert path (writeBoth.js maintains it), but it is unreliable across
@@ -95,6 +145,38 @@ async function handleStageTransition(params) {
   }, historyEntry);
 
   console.log(`${LOG_PREFIX} Firestore updated: ${existing.data.cgId} → ${newStage}`);
+
+  // 4b. If form data is present (agent → sales_review form), write it to
+  //     Firestore BEFORE routing so stageRouter.routeLead sees the new fields
+  //     when it inserts the row into the target sheet.
+  if (params.formData) {
+    const fd = params.formData;
+    const formUpdates = {};
+
+    if (fd.amountPaid !== undefined)   formUpdates.amountPaid   = fd.amountPaid;
+    if (fd.modeOfPay)                  formUpdates.modeOfPay    = fd.modeOfPay;
+    if (fd.paymentRefId)               formUpdates.paymentRefId = fd.paymentRefId;
+    if (fd.scholarship !== undefined)  formUpdates.scholarship  = fd.scholarship;
+    if (fd.installment !== undefined)  formUpdates.installment  = fd.installment;
+
+    if (Object.keys(formUpdates).length > 0) {
+      const formHistoryEntry = {
+        action: 'submitted_to_sales',
+        by: editor || 'system',
+        details: {
+          scholarshipRequested: fd.scholarship || 0,
+          installmentRequested: fd.installment || 1,
+          amountClaimed:        fd.amountPaid  || 0,
+          modeOfPay:            fd.modeOfPay   || '',
+          paymentRefId:         fd.paymentRefId || '',
+          requestDetails:       (fd.requestDetails || '').substring(0, 500),
+        },
+      };
+
+      await FirestoreService.updateLead(phone, formUpdates, formHistoryEntry);
+      console.log(`${LOG_PREFIX} Form data written for ${existing.data.cgId}`);
+    }
+  }
 
   // 5. Route — stageRouter handles same-sheet, cross-sheet, and terminal cases.
   try {
