@@ -180,7 +180,7 @@ module.exports = {
   SPREADSHEET_ID: process.env.SPREADSHEET_ID,
 
   SHEETS: {
-    DSR: 'Sheet5',
+    DSR: 'Leads',
     PAID: 'Paid_Users',
     MANUAL_REVIEW: 'Manual_Review',
     FIREBASE_WHITELIST: 'OnlineAttendence'
