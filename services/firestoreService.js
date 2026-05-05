@@ -219,6 +219,20 @@ async function createLead(leadData) {
     fulfillmentType: '',
     batchOrSlot: '',
     consultant: '',
+    // Pre-existing schema gap: scholarship/installment were in FIELD_HEADERS
+    // and TRACKED_FIELDS but missing from createLead defaults.
+    scholarship: 0,
+    installment: 1,
+    // Sales review + payment transition (Phase 4)
+    salesApproval: '',
+    paymentApproval: '',
+    timeOfPay: '',
+    modeOfStudy: '',
+    certificateType: '',
+    batch: '',
+    partialAccess: false,
+    accessThreshold: '',
+    paymentDeadline: '',
     createdAt: now,
     updatedAt: now,
     sheetRow: leadData.sheetRow || null,

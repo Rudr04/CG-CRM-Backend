@@ -178,6 +178,40 @@ async function handleStageTransition(params) {
     }
   }
 
+  // 4c. If form data for sales_review → payment transition (Sales Approval form).
+  //     Same write-before-route ordering as 4b: stageRouter.routeLead inserts
+  //     the destination row from Firestore, so finalPrice / partialAccess /
+  //     accessThreshold / paymentDeadline must already be present.
+  if (params.formData && currentStage === 'sales_review' && newStage === 'payment') {
+    const fd = params.formData;
+    const paymentFormUpdates = {};
+
+    if (fd.finalPrice !== undefined)    paymentFormUpdates.finalPrice    = fd.finalPrice;
+    if (fd.partialAccess !== undefined) paymentFormUpdates.partialAccess = fd.partialAccess;
+    if (fd.accessThreshold !== undefined && fd.accessThreshold !== null) {
+      paymentFormUpdates.accessThreshold = fd.accessThreshold;
+    }
+    if (fd.paymentDeadline !== undefined && fd.paymentDeadline !== null) {
+      paymentFormUpdates.paymentDeadline = fd.paymentDeadline;
+    }
+
+    if (Object.keys(paymentFormUpdates).length > 0) {
+      const paymentHistoryEntry = {
+        action: 'approved_for_payment',
+        by: editor || 'system',
+        details: {
+          finalPrice:      fd.finalPrice      || 0,
+          partialAccess:   fd.partialAccess   || false,
+          accessThreshold: fd.accessThreshold || null,
+          paymentDeadline: fd.paymentDeadline || null,
+        },
+      };
+
+      await FirestoreService.updateLead(phone, paymentFormUpdates, paymentHistoryEntry);
+      console.log(`${LOG_PREFIX} Payment form data written for ${existing.data.cgId}`);
+    }
+  }
+
   // 5. Route — stageRouter handles same-sheet, cross-sheet, and terminal cases.
   try {
     const routeResult = await stageRouter.routeLead({

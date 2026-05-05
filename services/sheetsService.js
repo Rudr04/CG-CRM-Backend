@@ -518,6 +518,19 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     fulfillmentStatus: 'fulfillmentStatus',
     fulfillmentDate:   'fulfillmentDate',
     fulfillmentRemark: 'fulfillmentRemark',
+    // Sales review + payment transition fields
+    // (paymentDate reuses dateOfPayment above; txnLast4 reuses paymentRefId above;
+    //  adjustedFee reuses finalPrice below)
+    salesApproval:    'salesApproval',
+    paymentApproval:  'paymentApproval',
+    timeOfPay:        'timeOfPay',
+    modeOfStudy:      'modeOfStudy',
+    certificateType:  'certificateType',
+    batch:            'batch',
+    finalPrice:       'finalPrice',
+    partialAccess:    'partialAccess',
+    accessThreshold:  'accessThreshold',
+    paymentDeadline:  'paymentDeadline',
   };
 
   const set = (fieldKey, value) => {

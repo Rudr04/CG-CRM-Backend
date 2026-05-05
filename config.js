@@ -129,6 +129,18 @@ const FIELD_HEADERS = {
   fulfillmentType:   'Fulfillment Type',
   batchOrSlot:       'Batch / Slot',
   consultant:        'Consultant',
+  // Sales review approval + product config (sales_review sheet)
+  // NOTE: paymentDate reuses dateOfPayment, txnLast4 reuses paymentRefId,
+  // adjustedFee reuses finalPrice — no duplicate keys.
+  salesApproval:     'Sales Approval',
+  paymentApproval:   'Payment Approval',
+  timeOfPay:         'Time of Pay',
+  modeOfStudy:       'Mode of Study',
+  certificateType:   'Certificate Type',
+  batch:             'Batch',
+  partialAccess:     'Partial Access',
+  accessThreshold:   'Access Threshold',
+  paymentDeadline:   'Payment Deadline',
 };
 
 // Reverse map: header text → field key
@@ -159,6 +171,16 @@ const TRACKED_FIELDS = {
   salesRemark:     { firestoreField: 'salesRemark',     historyAction: 'sales_remark_added' },
   fulfillmentStatus: { firestoreField: 'fulfillmentStatus', historyAction: 'fulfillment_status_changed' },
   fulfillmentRemark: { firestoreField: 'fulfillmentRemark', historyAction: 'fulfillment_remark_added' },
+  // Sales review approval + verification + product config
+  salesApproval:    { firestoreField: 'salesApproval',    historyAction: 'sales_approval_changed' },
+  paymentApproval:  { firestoreField: 'paymentApproval',  historyAction: 'payment_approval_changed' },
+  modeOfStudy:      { firestoreField: 'modeOfStudy',      historyAction: 'mode_of_study_set' },
+  certificateType:  { firestoreField: 'certificateType',  historyAction: 'certificate_type_set' },
+  batch:            { firestoreField: 'batch',            historyAction: 'batch_set' },
+  timeOfPay:        { firestoreField: 'timeOfPay',        historyAction: 'time_of_pay_set' },
+  // Reused field keys (paymentDate→dateOfPayment, txnLast4→paymentRefId)
+  dateOfPayment:    { firestoreField: 'dateOfPayment',    historyAction: 'payment_date_set' },
+  paymentRefId:     { firestoreField: 'paymentRefId',     historyAction: 'txn_ref_set' },
 };
 
 // Auto-generated lookup maps
@@ -304,6 +326,12 @@ module.exports = {
     'agent_working→sales_review': {
       required: ['amountPaid', 'modeOfPay'],
       description: 'Payment evidence required before sales review',
+    },
+    'sales_review→payment': {
+      required: ['salesApproval'],
+      requiredValue: { salesApproval: 'Approved' },
+      formRequired: ['finalPrice'],
+      description: 'Sales approval and final price required before payment',
     },
   },
 

@@ -3,7 +3,11 @@
     "allow": [
       "Bash(ls -la \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\\\\src\")",
       "Bash(node -c scripts/migrate-3a-rename.js)",
-      "Bash(node -e \"require\\('./handlers/stageHandler'\\); require\\('./services/stageRouter'\\); require\\('./config'\\); console.log\\('OK'\\);\")"
+      "Bash(node -e \"require\\('./handlers/stageHandler'\\); require\\('./services/stageRouter'\\); require\\('./config'\\); console.log\\('OK'\\);\")",
+      "Bash(node -e \"require\\('./config'\\); console.log\\('config OK'\\);\")",
+      "Bash(node -e \"require\\('./services/sheetsService'\\); console.log\\('sheetsService OK'\\);\")",
+      "Bash(node -e \"require\\('./services/firestoreService'\\); console.log\\('firestoreService OK'\\);\")",
+      "Bash(node -e \"require\\('./handlers/stageHandler'\\); console.log\\('stageHandler OK'\\);\")"
     ]
   }
 }
