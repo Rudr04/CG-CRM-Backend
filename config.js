@@ -41,8 +41,8 @@ const TIMEOUTS = {
 
 const WHATSAPP = {
   GROUP_LINKS: {
-    MORNING: 'https://chat.whatsapp.com/EgpO11VxMPcAnmu8YylIqI',   // TODO: update URL for morning group
-    EVENING: 'https://chat.whatsapp.com/LU7lyII2CaOK5aJLw6PhZ9',   // TODO: update URL for evening group
+    MORNING: 'https://chat.whatsapp.com/ExBendASS6WHEz2caM621L',   // TODO: update URL for morning group
+    EVENING: 'https://chat.whatsapp.com/FYhsV9OjvQr4VwQRmm8sGv',   // TODO: update URL for evening group
   },
   TEMPLATES: {
     MORNING_CONFIRMATION: 'cgi_22_test3',      // TODO: update template name
