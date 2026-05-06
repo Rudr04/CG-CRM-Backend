@@ -41,13 +41,14 @@ const TIMEOUTS = {
 
 const WHATSAPP = {
   GROUP_LINKS: {
-    ONLINE: 'https://chat.whatsapp.com/EgpO11VxMPcAnmu8YylIqI',
-    OFFLINE: 'https://chat.whatsapp.com/LU7lyII2CaOK5aJLw6PhZ9',
+    MORNING: 'https://chat.whatsapp.com/EgpO11VxMPcAnmu8YylIqI',   // TODO: update URL for morning group
+    EVENING: 'https://chat.whatsapp.com/LU7lyII2CaOK5aJLw6PhZ9',   // TODO: update URL for evening group
   },
   TEMPLATES: {
-    ONLINE_CONFIRMATION: 'cgi_22_test3',
-    OFFLINE_CONFIRMATION: 'cgi_22_test3_2',
+    MORNING_CONFIRMATION: 'cgi_22_test3',      // TODO: update template name
+    EVENING_CONFIRMATION: 'cgi_22_test3_2',    // TODO: update template name
   },
+  REDIRECT_BASE: 'https://log-redirect-click.rudr0401.workers.dev',
   BROADCAST_NAME: 'Registration_Confirmation',
 };
 
@@ -213,9 +214,10 @@ module.exports = {
     BASE_URL: process.env.WATI_BASE_URL,
     ...WHATSAPP,
     FORM_PARAMS: {
-      NAME:   'mc_regi_form_23_screen_0_textinput_0',
-      PHONE:  'mc_regi_form_23_screen_0_textinput_1',
-      OPTION: 'mc_regi_form_23_screen_0_radiobuttonsgroup_0',
+      FORM_CONTENT: 'mc_regi_24_content',
+      NAME:   'mc_regi_24_screen_0_textinput_0',
+      OPTION: 'mc_regi_24_screen_0_radiobuttonsgroup_0',
+      // PHONE field removed — form no longer collects phone, waId is used directly
     },
   },
 
@@ -288,11 +290,16 @@ module.exports = {
 
   // ─── Form Options & Status Values ─────────────────────────────────────────
   FORM_OPTIONS: {
-    OFFLINE_OPTION: "Offline (અમદાવાદ ક્લાસ માં)",
-    OFFLINE_STATUS: "Ahm MC Link Sent",
-    ONLINE_STATUS: "Online MC Link Sent",
-    OFFLINE_GROUP_JOINED: "Ahm MC GrpJoined",
-    ONLINE_GROUP_JOINED: "Online MC GrpJoined",
+    MORNING_OPTION: '10:00 AM (ગુજરાતીમાં )',
+    EVENING_OPTION: '4:30 PM (हिन्दीमे)',
+    MORNING_STATUS: 'Morning MC Link Sent',
+    EVENING_STATUS: 'Evening MC Link Sent',
+    MORNING_GROUP_JOINED: 'Morning MC GrpJoined',
+    EVENING_GROUP_JOINED: 'Evening MC GrpJoined',
+    MC_DATE_GUJ: 'રવિવાર, 7 જૂન',
+    MC_DATE_HINDI: 'रविवार, 7 जून',
+    MC_TIME_MORNING: '10:00 AM',
+    MC_TIME_EVENING: '4:30 PM',
   },
 
   CONVERTED_STATUSES: ['Admission Done', 'Seat Booked'],

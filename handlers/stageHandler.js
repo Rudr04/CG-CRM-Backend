@@ -11,6 +11,7 @@
 // ============================================================================
 
 const FirestoreService = require('../services/firestoreService');
+const FirebaseService  = require('../services/firebaseService');
 const SheetService     = require('../services/sheetsService');
 const stageRouter      = require('../services/stageRouter');
 const config           = require('../config');
@@ -209,6 +210,20 @@ async function handleStageTransition(params) {
 
       await FirestoreService.updateLead(phone, paymentFormUpdates, paymentHistoryEntry);
       console.log(`${LOG_PREFIX} Payment form data written for ${existing.data.cgId}`);
+    }
+  }
+
+  // 4d. Auto-whitelist on fulfillment stage transition
+  if (newStage === 'fulfillment') {
+    try {
+      const leadName = existing.data.name || '';
+      const leadPhone = existing.data.phone || phone;
+
+      await FirebaseService.addToWhitelist(leadPhone, leadName, 'fulfillment_auto');
+      console.log(`${LOG_PREFIX} Auto-whitelisted ${leadPhone} on fulfillment transition`);
+    } catch (whitelistErr) {
+      // Log but don't block the stage transition
+      console.error(`${LOG_PREFIX} Auto-whitelist FAILED for ${phone}: ${whitelistErr.message}`);
     }
   }
 

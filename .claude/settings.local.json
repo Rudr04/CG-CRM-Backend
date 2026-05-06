@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\" -name \"*nquiry*\" -type f)"
+      "Bash(find \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\" -name \"*nquiry*\" -type f)",
+      "Bash(grep -r \"OFFLINE_OPTION\\\\|OFFLINE_STATUS\\\\|ONLINE_STATUS\\\\|ONLINE_GROUP_JOINED\\\\|OFFLINE_GROUP_JOINED\" config.js handlers/ services/ 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(grep -r \"form_num\\\\|formNum\" handlers/formHandler.js 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(grep -r \"isOffline\" handlers/ services/ 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(grep \"includes.*'Online'\" handlers/contactHandler.js 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(grep \"mc_regi_form_23\" config.js 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(node -e \"require\\('./config'\\)\" && echo \"config OK\" && node -e \"require\\('./handlers/formHandler'\\)\" && echo \"formHandler OK\" && node -e \"require\\('./handlers/contactHandler'\\)\" && echo \"contactHandler OK\" && node -e \"require\\('./handlers/stageHandler'\\)\" && echo \"stageHandler OK\" && node -e \"require\\('./services/watiService'\\)\" && echo \"watiService OK\")",
+      "Bash(node -e \"require\\('./config'\\)\" 2>&1 && echo \"config OK\" || echo \"config FAIL\"; node -e \"require\\('./handlers/formHandler'\\)\" 2>&1 && echo \"formHandler OK\" || echo \"formHandler FAIL\"; node -e \"require\\('./handlers/contactHandler'\\)\" 2>&1 && echo \"contactHandler OK\" || echo \"contactHandler FAIL\"; node -e \"require\\('./handlers/stageHandler'\\)\" 2>&1 && echo \"stageHandler OK\" || echo \"stageHandler FAIL\"; node -e \"require\\('./services/watiService'\\)\" 2>&1 && echo \"watiService OK\" || echo \"watiService FAIL\")",
+      "Bash(node --check config.js && echo \"config OK\"; node --check handlers/formHandler.js && echo \"formHandler OK\"; node --check handlers/contactHandler.js && echo \"contactHandler OK\"; node --check handlers/stageHandler.js && echo \"stageHandler OK\"; node --check services/watiService.js && echo \"watiService OK\")",
+      "Bash(grep \"sendTemplateMessage\\\\|template_name\\\\|broadcast_name\" services/watiService.js; echo \"EXIT:$?\")",
+      "Bash(node --check services/watiService.js && echo \"watiService OK\"; node --check config.js && echo \"config OK\")"
     ]
   }
 }

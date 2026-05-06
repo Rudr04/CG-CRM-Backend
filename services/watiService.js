@@ -101,39 +101,26 @@ async function setRegistrationApprovalAttribute(waId, approvalType) {
 async function sendRegistrationConfirmation(params) {
   const waId = params.wa_num || '';
   const name = params.name || '';
-  const num = params.form_num || '';
-  const isOffline = params.option === config.FORM_OPTIONS.OFFLINE_OPTION;
-  const choice = isOffline ? "offline" : "online";
+  const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
 
   if (!waId) throw new ValidationError('Phone number (wa_num) is required');
 
-  // Use config for group links and template names
-  const grpLink = isOffline 
-    ? config.WATI.GROUP_LINKS.OFFLINE 
-    : config.WATI.GROUP_LINKS.ONLINE;
-  
-  const templateName = isOffline 
-    ? config.WATI.TEMPLATES.OFFLINE_CONFIRMATION 
-    : config.WATI.TEMPLATES.ONLINE_CONFIRMATION;
+  const grpLink = isEvening
+    ? config.WATI.GROUP_LINKS.EVENING
+    : config.WATI.GROUP_LINKS.MORNING;
 
-  const endpoint = `/api/v1/sendTemplateMessage?whatsappNumber=${waId}`;
-  
-  const response = await watiRequest('post', endpoint, {
-    template_name: templateName,
-    broadcast_name: config.WATI.BROADCAST_NAME,
-    parameters: [
-      { name: "mcregiform_screen_0_textinput_0", value: name },
-      { name: "mcregiform_screen_0_textinput_1", value: num },
-      { name: "dynamic_track", value: `?num=${waId}&dest=${grpLink}` }
-    ]
-  });
+  const dynamicLink = `${config.WATI.REDIRECT_BASE}/?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
 
-  if (response.status === 200) {
-    await setRegistrationApprovalAttribute(waId, choice);
-    console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
-    return true;
-  }
-  return false;
+  const message = isEvening
+    ? `🙏 शुभम! ${name}Ji\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है.*\n\n📅 ${config.FORM_OPTIONS.MC_DATE_HINDI} - ${config.FORM_OPTIONS.MC_TIME_EVENING}\n*🆔 Registration No: ${waId}*\n\nआप इस नंबर से मास्टरक्लास जॉइन कर सकेंगे।\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${dynamicLink}`
+    : `🙏 Shubham! ${name}Ji\n*✅ આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.*\n\n📅 ${config.FORM_OPTIONS.MC_DATE_GUJ} - ${config.FORM_OPTIONS.MC_TIME_MORNING}\n*🆔 Registration No: ${waId}*\n\nઆપ આ નંબર દ્વારા માસ્ટરક્લાસ જોઈન કરી શકશો.\n🔗 લિંક અને વધુ માહિતી માટે WhatsApp ગ્રુપ જોઈન કરો:\n${dynamicLink}`;
+
+  await sendSessionMessage(waId, message);
+
+  const choice = isEvening ? 'evening' : 'morning';
+  await setRegistrationApprovalAttribute(waId, choice);
+  console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
+  return true;
 }
 
 

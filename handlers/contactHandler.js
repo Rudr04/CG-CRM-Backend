@@ -236,7 +236,7 @@ async function handleCommunityJoin(params) {
     currentTeam   = sheetLead.data.team   || config.DEFAULTS.TEAM;
   }
 
-  const newStatus   = currentStatus.includes('Online') ? config.FORM_OPTIONS.ONLINE_GROUP_JOINED : config.FORM_OPTIONS.OFFLINE_GROUP_JOINED;
+  const newStatus   = currentStatus.includes('Evening') ? config.FORM_OPTIONS.EVENING_GROUP_JOINED : config.FORM_OPTIONS.MORNING_GROUP_JOINED;
   const assignRobo  = currentTeam === config.DEFAULTS.TEAM;
 
   const fsUpdates = { status: newStatus };
@@ -245,7 +245,7 @@ async function handleCommunityJoin(params) {
   const customFirestore = async () => {
     await FirestoreService.updateLead(phone, fsUpdates, {
       action: 'community_joined', by: 'system',
-      details: { status: newStatus, groupType: currentStatus.includes('Online') ? 'online' : 'ahmedabad' }
+      details: { status: newStatus, groupType: currentStatus.includes('Evening') ? 'evening' : 'morning' }
     });
   };
 

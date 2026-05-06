@@ -18,13 +18,12 @@ async function handleFormSubmission(params) {
   const phone   = params.wa_num || '';
   const name    = params.name || '';
   const option  = params.option || '';
-  const formNum = params.form_num || '';
 
-  const statusValue = option === config.FORM_OPTIONS.OFFLINE_OPTION
-    ? config.FORM_OPTIONS.OFFLINE_STATUS
-    : config.FORM_OPTIONS.ONLINE_STATUS;
+  const statusValue = option === config.FORM_OPTIONS.EVENING_OPTION
+    ? config.FORM_OPTIONS.EVENING_STATUS
+    : config.FORM_OPTIONS.MORNING_STATUS;
 
-  const whitelistPhone = formNum || phone;
+  const whitelistPhone = phone; // Always use the messaging waId
 
   // Shared across firestore + sheet closures so the actual CGID flows from
   // the Firestore write into the Sheet write (instead of a row-1 formula).
@@ -44,10 +43,10 @@ async function handleFormSubmission(params) {
     // Firestore lead record
     try {
       const result = await FirestoreService.createOrUpdateLead({
-        phone, name, regiNo: formNum, status: statusValue, inquiry: config.DEFAULTS.INQUIRY,
+        phone, name, status: statusValue, inquiry: config.DEFAULTS.INQUIRY,
       }, {
         action: 'form_submitted', by: 'system',
-        details: { formNum, option, statusValue }
+        details: { option, statusValue }
       });
       if (result?.cgId) cgId = result.cgId;
     } catch (e) { errors.push(`firestore: ${e.message}`); }
@@ -107,15 +106,13 @@ async function handleFlowReply(params) {
 function _extractFormDataFromContact(contact, phoneNumber) {
   const customParams = contact.customParams || [];
   const nameParam   = customParams.find(p => p.name === config.WATI.FORM_PARAMS.NAME);
-  const phoneParam  = customParams.find(p => p.name === config.WATI.FORM_PARAMS.PHONE);
   const optionParam = customParams.find(p => p.name === config.WATI.FORM_PARAMS.OPTION);
 
-  if (!nameParam || !phoneParam || !optionParam) return null;
+  if (!nameParam || !optionParam) return null;
 
   return {
     wa_num:   phoneNumber,
     name:     nameParam.value,
-    form_num: phoneParam.value,
     option:   optionParam.value,
   };
 }
