@@ -523,7 +523,6 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     //  adjustedFee reuses finalPrice below)
     salesApproval:    'salesApproval',
     paymentApproval:  'paymentApproval',
-    timeOfPay:        'timeOfPay',
     modeOfStudy:      'modeOfStudy',
     certificateType:  'certificateType',
     batch:            'batch',

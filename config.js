@@ -134,7 +134,6 @@ const FIELD_HEADERS = {
   // adjustedFee reuses finalPrice — no duplicate keys.
   salesApproval:     'Sales Approval',
   paymentApproval:   'Payment Approval',
-  timeOfPay:         'Time of Pay',
   modeOfStudy:       'Mode of Study',
   certificateType:   'Certificate Type',
   batch:             'Batch',
@@ -177,7 +176,6 @@ const TRACKED_FIELDS = {
   modeOfStudy:      { firestoreField: 'modeOfStudy',      historyAction: 'mode_of_study_set' },
   certificateType:  { firestoreField: 'certificateType',  historyAction: 'certificate_type_set' },
   batch:            { firestoreField: 'batch',            historyAction: 'batch_set' },
-  timeOfPay:        { firestoreField: 'timeOfPay',        historyAction: 'time_of_pay_set' },
   // Reused field keys (paymentDate→dateOfPayment, txnLast4→paymentRefId)
   dateOfPayment:    { firestoreField: 'dateOfPayment',    historyAction: 'payment_date_set' },
   paymentRefId:     { firestoreField: 'paymentRefId',     historyAction: 'txn_ref_set' },

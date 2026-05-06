@@ -226,7 +226,6 @@ async function createLead(leadData) {
     // Sales review + payment transition (Phase 4)
     salesApproval: '',
     paymentApproval: '',
-    timeOfPay: '',
     modeOfStudy: '',
     certificateType: '',
     batch: '',
