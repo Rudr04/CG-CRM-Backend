@@ -141,7 +141,33 @@ const FIELD_HEADERS = {
   partialAccess:     'Partial Access',
   accessThreshold:   'Access Threshold',
   paymentDeadline:   'Payment Deadline',
+  // Ad attribution (looked up from WATI sourceId via AD_SOURCE_MAPPING)
+  adCampaign:        'Ad Campaign',
+  adSet:             'Ad Set',
 };
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AD SOURCE MAPPING — sourceId (from WATI webhook) → { adCampaign, adSet }
+//  Hardcoded; update when new ad sets/campaigns launch.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const AD_SOURCE_MAPPING = {
+  '6968831057361': { adSet: 'Rajesthan ads',    adCampaign: 'CGI_May_2026_MMO' },
+  '6968831057561': { adSet: 'Maharastra',       adCampaign: 'CGI_May_2026_MMO' },
+  '6968831057761': { adSet: 'Madhya Pradesh',   adCampaign: 'CGI_May_2026_MMO' },
+  '6968831057961': { adSet: 'Haryana ads',      adCampaign: 'CGI_May_2026_MMO' },
+  '6968831058161': { adSet: 'Mumbai ads',       adCampaign: 'CGI_May_2026_MMO' },
+  '6968826782161': { adSet: 'Punjab-all ads',   adCampaign: 'CGI_May_2026_MMO' },
+  '6968822565961': { adSet: 'Gujarat-all ads',  adCampaign: 'CGI_May_2026_MMO' },
+  '6641334265161': { adSet: 'CGI Gujarat ads',  adCampaign: 'CGI Admissions_May_2026' },
+};
+
+function getAdMapping(sourceId) {
+  if (!sourceId) return { adCampaign: '', adSet: '' };
+  const hit = AD_SOURCE_MAPPING[String(sourceId).trim()];
+  return hit ? { adCampaign: hit.adCampaign, adSet: hit.adSet } : { adCampaign: '', adSet: '' };
+}
 
 // Reverse map: header text → field key
 const HEADER_TO_FIELD = {};
@@ -282,6 +308,10 @@ module.exports = {
   colLetter,             // utility: colLetter(3) → 'D'
   FIELD_HEADERS,         // fieldKey → sheet header text
   HEADER_TO_FIELD,       // sheet header text → fieldKey
+
+  // ─── Ad Attribution (Meta sourceId → campaign/adset) ──────────────────────
+  AD_SOURCE_MAPPING,     // sourceId → { adCampaign, adSet }
+  getAdMapping,          // (sourceId) → { adCampaign, adSet } — '' if no match
 
   // ─── Field Sync Mappings ────────────────────────────────────────────────────
   TRACKED_FIELDS,        // fieldName → { firestoreField, historyAction }

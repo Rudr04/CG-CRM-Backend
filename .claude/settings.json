@@ -7,7 +7,12 @@
       "Bash(node -e \"require\\('./config'\\); console.log\\('config OK'\\);\")",
       "Bash(node -e \"require\\('./services/sheetsService'\\); console.log\\('sheetsService OK'\\);\")",
       "Bash(node -e \"require\\('./services/firestoreService'\\); console.log\\('firestoreService OK'\\);\")",
-      "Bash(node -e \"require\\('./handlers/stageHandler'\\); console.log\\('stageHandler OK'\\);\")"
+      "Bash(node -e \"require\\('./handlers/stageHandler'\\); console.log\\('stageHandler OK'\\);\")",
+      "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/config.js\")",
+      "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/handlers/contactHandler.js\")",
+      "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/services/firestoreService.js\")",
+      "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/services/sheetsService.js\")",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

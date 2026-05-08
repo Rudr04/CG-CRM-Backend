@@ -27,6 +27,7 @@ async function handleNewContact(params) {
   try {
     const phone = validatePhoneNumber(params.waId, { source: 'handleNewContact' });
     const name  = params.senderName || '';
+    const ad    = config.getAdMapping(params.sourceId);
 
     // Side-effect: Smartflo sync (non-blocking, non-transactional)
     if (phone) {
@@ -38,6 +39,7 @@ async function handleNewContact(params) {
     const leadData = {
       phone, name, source: 'WhatsApp', status: config.DEFAULTS.STATUS,
       team: config.DEFAULTS.TEAM, inquiry: config.DEFAULTS.INQUIRY, channel: 'wati_new_contact',
+      adCampaign: ad.adCampaign, adSet: ad.adSet,
     };
 
     const writeFn = buildWriteBoth(leadData, {
@@ -66,11 +68,13 @@ async function handleNewContact(params) {
 async function handleInterestedUser(params) {
   console.log('For Learning selected');
   const phone = validatePhoneNumber(params.waId, { source: 'handleInterestedUser' });
+  const ad    = config.getAdMapping(params.sourceId);
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
     message: params.text || params.msg || '', team: config.DEFAULTS.TEAM,
     inquiry: config.DEFAULTS.INQUIRY, channel: 'interested_reply',
+    adCampaign: ad.adCampaign, adSet: ad.adSet,
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -92,10 +96,12 @@ async function handleAdvertisementContact(params) {
   const phone = validatePhoneNumber(params.waId, { source: 'handleAdvertisementContact' });
   const text = params.text || '';
   const team = shouldAssignRobo(text) ? config.DEFAULTS.ROBO_AGENT : config.DEFAULTS.TEAM;
+  const ad   = config.getAdMapping(params.sourceId);
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
     message: text, team, inquiry: config.DEFAULTS.INQUIRY, channel: 'advertisement',
+    adCampaign: ad.adCampaign, adSet: ad.adSet,
   };
 
   const writeFn = buildWriteBoth(leadData, {
@@ -148,11 +154,13 @@ async function handleKeywordContact(params) {
   const phone = validatePhoneNumber(params.waId, { source: 'handleKeywordContact' });
   const text = params.text || '';
   const team = shouldAssignRobo(text) ? config.DEFAULTS.ROBO_AGENT : config.DEFAULTS.TEAM;
+  const ad   = config.getAdMapping(params.sourceId);
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
     message: `Keyword: ${text}`, team, inquiry: config.DEFAULTS.INQUIRY,
     channel: 'keyword_message',
+    adCampaign: ad.adCampaign, adSet: ad.adSet,
   };
 
   const writeFn = buildWriteBoth(leadData, {

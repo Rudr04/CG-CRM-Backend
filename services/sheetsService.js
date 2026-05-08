@@ -143,6 +143,18 @@ async function upsertContact(leadData) {
         cellUpdates[M.product] = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
       }
     }
+    if (leadData.adCampaign && M.adCampaign !== undefined) {
+      const currentAdCampaign = existing.data.adCampaign || '';
+      if (!currentAdCampaign.split(', ').includes(leadData.adCampaign)) {
+        cellUpdates[M.adCampaign] = currentAdCampaign ? `${currentAdCampaign}, ${leadData.adCampaign}` : leadData.adCampaign;
+      }
+    }
+    if (leadData.adSet && M.adSet !== undefined) {
+      const currentAdSet = existing.data.adSet || '';
+      if (!currentAdSet.split(', ').includes(leadData.adSet)) {
+        cellUpdates[M.adSet] = currentAdSet ? `${currentAdSet}, ${leadData.adSet}` : leadData.adSet;
+      }
+    }
 
     if (Object.keys(cellUpdates).length > 0) {
       await updateContactCells(existing.row, cellUpdates);
@@ -194,6 +206,8 @@ async function upsertContact(leadData) {
     set('team',     team);
     set('status',   status);
     set('remark',   remark);
+    set('adCampaign', leadData.adCampaign || '');
+    set('adSet',      leadData.adSet || '');
 
     const dateLetter   = config.colLetter(M.date);
     const timeLetter   = config.colLetter(M.time);
@@ -530,6 +544,8 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     partialAccess:    'partialAccess',
     accessThreshold:  'accessThreshold',
     paymentDeadline:  'paymentDeadline',
+    adCampaign:       'adCampaign',
+    adSet:            'adSet',
   };
 
   const set = (fieldKey, value) => {

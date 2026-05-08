@@ -232,6 +232,9 @@ async function createLead(leadData) {
     partialAccess: false,
     accessThreshold: '',
     paymentDeadline: '',
+    // Ad attribution (resolved from WATI sourceId via config.getAdMapping)
+    adCampaign: cleanString(leadData.adCampaign),
+    adSet: cleanString(leadData.adSet),
     createdAt: now,
     updatedAt: now,
     sheetRow: leadData.sheetRow || null,
@@ -321,6 +324,18 @@ async function createOrUpdateLead(leadData, historyEntry) {
       const currentProduct = existing.data.product || '';
       if (!currentProduct.split(', ').includes(leadData.product)) {
         updates.product = currentProduct ? `${currentProduct}, ${leadData.product}` : leadData.product;
+      }
+    }
+    if (leadData.adCampaign) {
+      const currentAdCampaign = existing.data.adCampaign || '';
+      if (!currentAdCampaign.split(', ').includes(leadData.adCampaign)) {
+        updates.adCampaign = currentAdCampaign ? `${currentAdCampaign}, ${leadData.adCampaign}` : leadData.adCampaign;
+      }
+    }
+    if (leadData.adSet) {
+      const currentAdSet = existing.data.adSet || '';
+      if (!currentAdSet.split(', ').includes(leadData.adSet)) {
+        updates.adSet = currentAdSet ? `${currentAdSet}, ${leadData.adSet}` : leadData.adSet;
       }
     }
     if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;
