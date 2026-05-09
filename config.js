@@ -100,6 +100,7 @@ const FIELD_HEADERS = {
   status:        'Status',
   rating:        'Rating',
   cbDate:        'CB Date',
+  cbTime:        'CB Time',
   remark:        'Remark',
   day:           'Day',
   hours:         'Hours',
@@ -191,6 +192,8 @@ const TRACKED_FIELDS = {
   rating:        { firestoreField: 'rating',         historyAction: 'rating_changed' },
   remark:        { firestoreField: 'remark',         historyAction: 'remark_added' },
   pipelineStage: { firestoreField: 'pipelineStage',  historyAction: 'stage_changed' },
+  cbDate:        { firestoreField: 'cbDate',          historyAction: 'cb_date_set' },
+  cbTime:        { firestoreField: 'cbTime',          historyAction: 'cb_time_set' },
   scholarship:     { firestoreField: 'scholarship',   historyAction: 'scholarship_updated' },
   installment:     { firestoreField: 'installment',    historyAction: 'installment_updated' },
   // Phase 3
