@@ -44,7 +44,8 @@ function generateEventId(params) {
   const type = params.eventType || params.event_type || params.type || params.event || 'unknown';
   const waId = params.waId || params.wa_num || params.phone || params.data?.phone || '';
   const messageId = params.messageId || params.id || '';
-  const timestamp = params.timestamp || Date.now();
+  const rawTs = params.timestamp || Date.now();
+  const timestamp = typeof rawTs === 'string' ? new Date(rawTs).getTime() : rawTs;
 
   if (messageId) return `msg_${messageId}`;
   if (type === 'whatsapp_flow_reply') return `flow_${waId}`;
