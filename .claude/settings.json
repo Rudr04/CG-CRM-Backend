@@ -12,7 +12,8 @@
       "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/handlers/contactHandler.js\")",
       "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/services/firestoreService.js\")",
       "Bash(node -c \"/c/Users/rudr0/Downloads/cloud-function/services/sheetsService.js\")",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "PowerShell(Rename-Item -Path \"c:\\\\Users\\\\rudr0\\\\Downloads\\\\CosmoGuru-AppScript-Refactored \\(1\\)\\\\src\\\\CallbackPoller.html\" -NewName \"CallbackSidebar.html\")"
     ]
   }
 }

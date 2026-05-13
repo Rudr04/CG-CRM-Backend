@@ -109,7 +109,7 @@ async function sendRegistrationConfirmation(params) {
     ? config.WATI.GROUP_LINKS.EVENING
     : config.WATI.GROUP_LINKS.MORNING;
 
-  const dynamicLink = `${config.WATI.REDIRECT_BASE}/?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
+  const dynamicLink = `${config.WATI.REDIRECT_BASE}?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
 
   const message = isEvening
     ? `🙏 शुभम! ${name}Ji\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है.*\n\n📅 ${config.FORM_OPTIONS.MC_DATE_HINDI} - ${config.FORM_OPTIONS.MC_TIME_EVENING}\n*🆔 Registration No: ${waId}*\n\nआप इस नंबर से मास्टरक्लास जॉइन कर सकेंगे।\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${dynamicLink}`
