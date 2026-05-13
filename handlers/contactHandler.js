@@ -153,12 +153,11 @@ async function handleKeywordContact(params) {
   console.log('Contact from keyword message');
   const phone = validatePhoneNumber(params.waId, { source: 'handleKeywordContact' });
   const text = params.text || '';
-  const team = shouldAssignRobo(text) ? config.DEFAULTS.ROBO_AGENT : config.DEFAULTS.TEAM;
   const ad   = config.getAdMapping(params.sourceId);
 
   const leadData = {
     phone, name: params.senderName || '', source: deriveSource(params),
-    message: `Keyword: ${text}`, team, inquiry: config.DEFAULTS.INQUIRY,
+    message: `Keyword: ${text}`, inquiry: config.DEFAULTS.INQUIRY,
     channel: 'keyword_message',
     adCampaign: ad.adCampaign, adSet: ad.adSet,
   };
