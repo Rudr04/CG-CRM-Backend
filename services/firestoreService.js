@@ -341,7 +341,7 @@ async function createOrUpdateLead(leadData, historyEntry) {
     if (leadData.pipelineStage) updates.pipelineStage = leadData.pipelineStage;
 
     const overwriteFields = [
-      'rating', 'cbDate',
+      'rating', 'cbDate','status',
       'salesRemark', 'approvalDate',
       'quantity', 'productPrice', 'amountPaid', 'pendingAmount',
       'modeOfPay', 'paymentRefId', 'dateOfPayment', 'receivedAccount',
