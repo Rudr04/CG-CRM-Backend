@@ -115,7 +115,7 @@ async function sendRegistrationConfirmation(params) {
     : config.WATI.GROUP_LINKS.MORNING;
 
   const timeText = isEvening ? 'शाम 4:30' : 'સવારે 10:00';
-  const dynamicLinkParam = isEvening ? 'dynamic_link' : '1';
+  const dynamicLinkParam = isEvening ? 'dynamic_track' : '1';
   const choice = isEvening ? 'evening' : 'morning';
 
   const trackUrl = `?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
