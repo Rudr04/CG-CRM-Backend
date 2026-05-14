@@ -101,26 +101,46 @@ async function setRegistrationApprovalAttribute(waId, approvalType) {
 async function sendRegistrationConfirmation(params) {
   const waId = params.wa_num || '';
   const name = params.name || '';
-  const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
 
   if (!waId) throw new ValidationError('Phone number (wa_num) is required');
+
+  const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
+
+  const templateName = isEvening
+    ? 'cgi24_regi_done_hindi_draft2'
+    : 'cgi24_regi_done_guj_draft1';
 
   const grpLink = isEvening
     ? config.WATI.GROUP_LINKS.EVENING
     : config.WATI.GROUP_LINKS.MORNING;
 
-  const dynamicLink = `${config.WATI.REDIRECT_BASE}?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
-
-  const message = isEvening
-    ? `🙏 शुभम! ${name}Ji\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है.*\n\n📅 ${config.FORM_OPTIONS.MC_DATE_HINDI} - ${config.FORM_OPTIONS.MC_TIME_EVENING}\n*🆔 Registration No: ${waId}*\n\nआप इस नंबर से मास्टरक्लास जॉइन कर सकेंगे।\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${dynamicLink}`
-    : `🙏 Shubham! ${name}Ji\n*✅ આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.*\n\n📅 ${config.FORM_OPTIONS.MC_DATE_GUJ} - ${config.FORM_OPTIONS.MC_TIME_MORNING}\n*🆔 Registration No: ${waId}*\n\nઆપ આ નંબર દ્વારા માસ્ટરક્લાસ જોઈન કરી શકશો.\n🔗 લિંક અને વધુ માહિતી માટે WhatsApp ગ્રુપ જોઈન કરો:\n${dynamicLink}`;
-
-  await sendSessionMessage(waId, message);
-
+  const timeText = isEvening ? 'शाम 4:30' : 'સવારે 10:00';
+  const dynamicLinkParam = isEvening ? 'dynamic_link' : '1';
   const choice = isEvening ? 'evening' : 'morning';
-  await setRegistrationApprovalAttribute(waId, choice);
-  console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
-  return true;
+
+  const trackUrl = `?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
+
+  const endpoint = `/api/v1/sendTemplateMessage?whatsappNumber=${waId}`;
+
+  const response = await watiRequest('post', endpoint, {
+    template_name: templateName,
+    broadcast_name: config.WATI.BROADCAST_NAME,
+    parameters: [
+      { name: 'mc_regi_24_screen_0_textinput_0', value: name },
+      { name: 'day',    value: 'Sunday' },
+      { name: 'date',   value: '7th June' },
+      { name: 'time',   value: timeText },
+      { name: 'number', value: waId },
+      { name: dynamicLinkParam, value: trackUrl },
+    ],
+  });
+
+  if (response.status === 200) {
+    await setRegistrationApprovalAttribute(waId, choice);
+    console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
+    return true;
+  }
+  return false;
 }
 
 
