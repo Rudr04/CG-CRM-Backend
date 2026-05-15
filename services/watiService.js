@@ -105,42 +105,24 @@ async function sendRegistrationConfirmation(params) {
   if (!waId) throw new ValidationError('Phone number (wa_num) is required');
 
   const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
-
-  const templateName = isEvening
-    ? 'cgi24_regi_done_hindi_draft2'
-    : 'cgi24_regi_done_guj_draft1';
+  const choice = isEvening ? 'evening' : 'morning';
 
   const grpLink = isEvening
     ? config.WATI.GROUP_LINKS.EVENING
     : config.WATI.GROUP_LINKS.MORNING;
 
-  const timeText = isEvening ? 'शाम 4:30' : 'સવારે 10:00';
-  const dynamicLinkParam = isEvening ? 'dynamic_track' : '1';
-  const choice = isEvening ? 'evening' : 'morning';
+  const link = isEvening
+    ? `https://join-wa.cosmoguru.com/e/${waId}`
+    : `https://join-wa.cosmoguru.com/m/${waId}`;
 
-  const trackUrl = `?num=${waId}&dest=${grpLink}`;
+  const message = isEvening
+    ? `🙏 शुभम! ${name}Ji\n\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है*\n\n📅 Sunday, 7th June | ⏰ शाम 4:30 बजे\n\n*🆔 रजिस्ट्रेशन नंबर: ${waId}*\nआप इस नंबर द्वारा मास्टरक्लास जॉइन कर सकेंगे\n\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${link}`
+    : `🙏 શુભમ! ${name}Ji\n\n✅ આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.\n\n📅 Sunday, 7th June | ⏰ સવારે 10:00 વાગ્યે\n\n🆔 રેજીસ્ટ્રેશન નંબર: ${waId}\nઆપ આ નંબર દ્વારા માસ્ટરક્લાસ જોઈન કરી શકશો.\n\n🔗 લિંક અને વધુ માહિતી માટે WhatsApp ગ્રુપ જોઈન કરો:\n${link}`;
 
-  const endpoint = `/api/v1/sendTemplateMessage?whatsappNumber=${waId}`;
-
-  const response = await watiRequest('post', endpoint, {
-    template_name: templateName,
-    broadcast_name: config.WATI.BROADCAST_NAME,
-    parameters: [
-      { name: 'mc_regi_24_screen_0_textinput_0', value: name },
-      { name: 'day',    value: 'Sunday' },
-      { name: 'date',   value: '7th June' },
-      { name: 'time',   value: timeText },
-      { name: 'number', value: waId },
-      { name: dynamicLinkParam, value: trackUrl },
-    ],
-  });
-
-  if (response.status === 200) {
-    await setRegistrationApprovalAttribute(waId, choice);
-    console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
-    return true;
-  }
-  return false;
+  await sendSessionMessage(waId, message);
+  await setRegistrationApprovalAttribute(waId, choice);
+  console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
+  return true;
 }
 
 
