@@ -107,10 +107,6 @@ async function sendRegistrationConfirmation(params) {
   const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
   const choice = isEvening ? 'evening' : 'morning';
 
-  const grpLink = isEvening
-    ? config.WATI.GROUP_LINKS.EVENING
-    : config.WATI.GROUP_LINKS.MORNING;
-
   const link = isEvening
     ? `https://join-wa.cosmoguru.com/e/${waId}`
     : `https://join-wa.cosmoguru.com/m/${waId}`;
