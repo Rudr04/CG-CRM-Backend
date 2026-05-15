@@ -118,7 +118,7 @@ async function sendRegistrationConfirmation(params) {
   const dynamicLinkParam = isEvening ? 'dynamic_track' : '1';
   const choice = isEvening ? 'evening' : 'morning';
 
-  const trackUrl = `?num=${waId}&dest=${encodeURIComponent(grpLink)}`;
+  const trackUrl = `?num=${waId}&dest=${grpLink}`;
 
   const endpoint = `/api/v1/sendTemplateMessage?whatsappNumber=${waId}`;
 
