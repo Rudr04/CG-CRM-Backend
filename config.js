@@ -361,16 +361,54 @@ module.exports = {
   // Mandatory fields for each stage transition. Checked by stageHandler
   // as a safety net — primary enforcement is the GAS form.
   TRANSITION_REQUIREMENTS: {
+ 
     'agent_working→sales_review': {
-      required: ['amountPaid', 'modeOfPay'],
+      formRequired: ['amountPaid', 'modeOfPay'],
+      formAccepted: [
+        'amountPaid', 'modeOfPay', 'paymentRefId',
+        'scholarship', 'installment', 'requestDetails',
+      ],
+      historyAction: 'submitted_to_sales',
+      historyDetailsFn: (fd) => ({
+        scholarshipRequested: fd.scholarship   || 0,
+        installmentRequested: fd.installment   || 1,
+        amountClaimed:        fd.amountPaid    || 0,
+        modeOfPay:            fd.modeOfPay     || '',
+        paymentRefId:         fd.paymentRefId  || '',
+        requestDetails:       (fd.requestDetails || '').substring(0, 500),
+      }),
       description: 'Payment evidence required before sales review',
     },
+ 
     'sales_review→payment': {
-      required: ['salesApproval'],
-      requiredValue: { salesApproval: 'Approved' },
       formRequired: ['finalPrice'],
-      description: 'Sales approval and final price required before payment',
+      formAccepted: [
+        'finalPrice', 'partialAccess', 'accessThreshold', 'paymentDeadline',
+      ],
+      historyAction: 'approved_for_payment',
+      historyDetailsFn: (fd) => ({
+        finalPrice:      fd.finalPrice      || 0,
+        partialAccess:   fd.partialAccess   || false,
+        accessThreshold: fd.accessThreshold || null,
+        paymentDeadline: fd.paymentDeadline || null,
+      }),
+      description: 'Final price required before payment',
     },
+ 
+    /* ── Future transitions (uncomment when sheets come online) ───
+    'payment→fulfillment': {
+      required: ['fullyPaid'],              // lead-level: must exist in Firestore
+      requiredValue: { fullyPaid: true },   // lead-level: must be true
+      formRequired: ['fulfillmentType'],
+      formAccepted: ['fulfillmentType', 'batchOrSlot', 'consultant'],
+      historyAction: 'moved_to_fulfillment',
+      historyDetailsFn: (fd) => ({
+        fulfillmentType: fd.fulfillmentType || '',
+        batchOrSlot:     fd.batchOrSlot     || '',
+        consultant:      fd.consultant      || '',
+      }),
+      description: 'Full payment and fulfillment details required',
+    }, */
   },
 
   // ─── Sheet Routing ────────────────────────────────────────────────────────

@@ -2,12 +2,19 @@
 //  handlers/stageHandler.js — Stage Transition Handler
 //
 //  Handles stage_transition events sent by GAS when an agent
-//  edits the Stage column. Validates the transition, updates
-//  Firestore, routes to target sheet, archives source row.
+//  edits the Stage column or submits a transition form.
+//
+//  Validates the transition, writes stage + form data atomically
+//  to Firestore, routes to target sheet, reverts on failure.
 //
 //  Separate from syncHandler because a stage transition is NOT
 //  a simple field sync — it involves validation, cross-sheet
 //  routing, and cell revert on failure.
+//
+//  FORM DATA FLOW:
+//    GAS form → params.formData → validated against config.TRANSITION_REQUIREMENTS
+//    → whitelisted fields written to Firestore in same call as pipelineStage
+//    → stageRouter reads updated doc for target sheet insert
 // ============================================================================
 
 const FirestoreService = require('../services/firestoreService');
@@ -19,55 +26,69 @@ const config           = require('../config');
 const LOG_PREFIX = '[StageTransition]';
 
 
+// ─────────────────────────────────────────────────────────────
+//  HELPER: Revert Stage cell on the source sheet
+//  Used by both transition validation and readiness check.
+// ─────────────────────────────────────────────────────────────
+async function _revertStageCell(sourceRow, currentStage, params) {
+  if (!sourceRow) return;
+
+  try {
+    const spreadsheetId = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
+    const tabName       = params.sourceTabName       || config.SHEETS.DSR;
+    const colMap = await SheetService.getColumnMap(tabName, spreadsheetId);
+    const stageColIdx = colMap.map.pipelineStage;
+
+    if (stageColIdx !== undefined) {
+      await SheetService.updateContactCells(
+        sourceRow,
+        { [stageColIdx]: currentStage },
+        spreadsheetId,
+        tabName
+      );
+      console.log(`${LOG_PREFIX} Reverted Stage cell to '${currentStage}' on ${tabName} row ${sourceRow}`);
+    }
+  } catch (revertErr) {
+    console.error(`${LOG_PREFIX} Revert failed: ${revertErr.message}`);
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  MAIN HANDLER
+// ─────────────────────────────────────────────────────────────
 async function handleStageTransition(params) {
   const { phone, oldStage, newStage, sourceRow, editor } = params;
 
+  // ── Basic param checks ──────────────────────────────────────
   if (!phone) {
     return { success: false, reason: 'no_phone' };
   }
-
   if (!newStage) {
     return { success: false, reason: 'no_target_stage' };
   }
 
   console.log(`${LOG_PREFIX} ${phone}: ${oldStage} → ${newStage} (by ${editor})`);
 
-  // 1. Look up lead in Firestore
+  // ── 1. Look up lead in Firestore ────────────────────────────
   const existing = await FirestoreService.findLeadByPhone(phone);
   if (!existing) {
     console.error(`${LOG_PREFIX} Lead not found: ${phone}`);
     return { success: false, reason: 'lead_not_found' };
   }
 
-  // 2. Determine current stage from Firestore (source of truth, not the old cell value)
-  // TEMP: fallback to .stage for pre-migration docs. Remove after migrate-stage-collapse.js has run.
-  const currentStage = existing.data.pipelineStage || existing.data.stage || config.STAGES.NOT_ASSIGNED;
+  // ── 2. Current stage from Firestore (source of truth) ───────
+  // TEMP: fallback to .stage for pre-migration docs.
+  // Remove after migrate-stage-collapse.js has run.
+  const currentStage = existing.data.pipelineStage
+                    || existing.data.stage
+                    || config.STAGES.NOT_ASSIGNED;
 
-  // 3. Validate transition
+  // ── 3. Validate transition is allowed ───────────────────────
   const allowedTargets = config.STAGE_TRANSITIONS[currentStage] || [];
   if (!allowedTargets.includes(newStage)) {
     console.warn(`${LOG_PREFIX} BLOCKED: ${currentStage} → ${newStage} (allowed: [${allowedTargets.join(', ')}])`);
-
-    // Revert the cell to current stage
-    if (sourceRow) {
-      try {
-        const revertSpreadsheetId = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
-        const revertTabName       = params.sourceTabName       || config.SHEETS.DSR;
-        const colMap = await SheetService.getColumnMap(revertTabName, revertSpreadsheetId);
-        const stageColIdx = colMap.map.pipelineStage;
-        if (stageColIdx !== undefined) {
-          await SheetService.updateContactCells(
-            sourceRow,
-            { [stageColIdx]: currentStage },
-            revertSpreadsheetId,
-            revertTabName
-          );
-          console.log(`${LOG_PREFIX} Reverted Stage cell to '${currentStage}' on ${revertTabName} row ${sourceRow}`);
-        }
-      } catch (revertErr) {
-        console.error(`${LOG_PREFIX} Failed to revert: ${revertErr.message}`);
-      }
-    }
+    await _revertStageCell(sourceRow, currentStage, params);
 
     return {
       success: false,
@@ -78,45 +99,59 @@ async function handleStageTransition(params) {
     };
   }
 
-  // 3b. Readiness check — safety net for transitions that require form data.
-  //     Primary enforcement is the GAS form; this catches direct CF calls
-  //     that bypass the form.
+  // ── 3b. Readiness check + collect accepted form fields ──────
   const transitionKey = `${currentStage}→${newStage}`;
-  const requirements = config.TRANSITION_REQUIREMENTS && config.TRANSITION_REQUIREMENTS[transitionKey];
+  const requirements = config.TRANSITION_REQUIREMENTS?.[transitionKey];
+  const formUpdates = {};  // populated here, written in step 4
 
   if (requirements) {
     const formData = params.formData || {};
     const missingFields = [];
 
-    for (const fieldKey of requirements.required) {
-      const value = formData[fieldKey];
-      if (value === undefined || value === null || value === '' ||
-          (typeof value === 'number' && value <= 0)) {
-        missingFields.push(fieldKey);
+    // Bucket 1: Lead-level required fields
+    if (requirements.required) {
+      for (const fieldKey of requirements.required) {
+        const value = existing.data[fieldKey];
+        if (value === undefined || value === null || value === '') {
+          missingFields.push(fieldKey);
+        }
+      }
+    }
+
+    // Bucket 2: Required specific values
+    if (requirements.requiredValue) {
+      for (const [fieldKey, expectedValue] of Object.entries(requirements.requiredValue)) {
+        if (existing.data[fieldKey] !== expectedValue) {
+          missingFields.push(`${fieldKey} (must be "${expectedValue}")`);
+        }
+      }
+    }
+
+    // Bucket 3: Form fields — validate required + collect accepted in ONE pass
+    if (requirements.formAccepted || requirements.formRequired) {
+      const requiredSet  = new Set(requirements.formRequired || []);
+      const acceptedSet  = new Set(requirements.formAccepted || []);
+
+      // Union: every accepted field + every required field (even if
+      // someone forgot to add it to formAccepted)
+      const allFields = new Set([...acceptedSet, ...requiredSet]);
+
+      for (const fieldKey of allFields) {
+        const value = formData[fieldKey];
+        const isEmpty = value === undefined || value === null || value === '' ||
+                        (typeof value === 'number' && value <= 0);
+
+        if (isEmpty && requiredSet.has(fieldKey)) {
+          missingFields.push(fieldKey);
+        } else if (!isEmpty && acceptedSet.has(fieldKey)) {
+          formUpdates[fieldKey] = value;
+        }
       }
     }
 
     if (missingFields.length > 0) {
-      console.warn(`${LOG_PREFIX} BLOCKED (missing form data): [${missingFields.join(', ')}] for ${transitionKey}`);
-
-      if (sourceRow) {
-        try {
-          const revertSpreadsheetId = params.sourceSpreadsheetId || config.SPREADSHEET_ID;
-          const revertTabName       = params.sourceTabName       || config.SHEETS.DSR;
-          const colMap = await SheetService.getColumnMap(revertTabName, revertSpreadsheetId);
-          const stageColIdx = colMap.map.pipelineStage;
-          if (stageColIdx !== undefined) {
-            await SheetService.updateContactCells(
-              sourceRow,
-              { [stageColIdx]: currentStage },
-              revertSpreadsheetId,
-              revertTabName
-            );
-          }
-        } catch (revertErr) {
-          console.error(`${LOG_PREFIX} Revert failed: ${revertErr.message}`);
-        }
-      }
+      console.warn(`${LOG_PREFIX} BLOCKED (missing data): [${missingFields.join(', ')}] for ${transitionKey}`);
+      await _revertStageCell(sourceRow, currentStage, params);
 
       return {
         success: false,
@@ -128,12 +163,13 @@ async function handleStageTransition(params) {
     }
   }
 
-  // 4. Valid transition — update Firestore.
-  //    sheetRow is intentionally NOT written here. It remains useful for the
-  //    DSR upsert path (writeBoth.js maintains it), but it is unreliable across
-  //    cross-sheet transitions since row numbers shift on delete/insert.
-  //    stageRouter no longer reads it.
+  // ── 4. Valid transition — single atomic Firestore write ─────
+  //    Stage change + form data (collected in 3b) land in ONE call.
+  //    stageRouter reads from Firestore after this, so all fields
+  //    are guaranteed present for the target sheet insert.
   console.log(`${LOG_PREFIX} Valid: ${currentStage} → ${newStage}`);
+
+  const updates = { pipelineStage: newStage, ...formUpdates };
 
   const historyEntry = {
     action: 'stage_transition',
@@ -141,93 +177,37 @@ async function handleStageTransition(params) {
     details: { from: currentStage, to: newStage },
   };
 
-  await FirestoreService.updateLead(phone, {
-    pipelineStage: newStage,
-  }, historyEntry);
-
+  await FirestoreService.updateLead(phone, updates, historyEntry);
   console.log(`${LOG_PREFIX} Firestore updated: ${existing.data.cgId} → ${newStage}`);
 
-  // 4b. If form data is present (agent → sales_review form), write it to
-  //     Firestore BEFORE routing so stageRouter.routeLead sees the new fields
-  //     when it inserts the row into the target sheet.
-  if (params.formData) {
-    const fd = params.formData;
-    const formUpdates = {};
+  // ── 4b. Form-specific history entry (config-driven) ─────────
+  if (Object.keys(formUpdates).length > 0 && requirements?.historyAction) {
+    const details = requirements.historyDetailsFn
+      ? requirements.historyDetailsFn(params.formData)
+      : { ...formUpdates };
 
-    if (fd.amountPaid !== undefined)   formUpdates.amountPaid   = fd.amountPaid;
-    if (fd.modeOfPay)                  formUpdates.modeOfPay    = fd.modeOfPay;
-    if (fd.paymentRefId)               formUpdates.paymentRefId = fd.paymentRefId;
-    if (fd.scholarship !== undefined)  formUpdates.scholarship  = fd.scholarship;
-    if (fd.installment !== undefined)  formUpdates.installment  = fd.installment;
-
-    if (Object.keys(formUpdates).length > 0) {
-      const formHistoryEntry = {
-        action: 'submitted_to_sales',
-        by: editor || 'system',
-        details: {
-          scholarshipRequested: fd.scholarship || 0,
-          installmentRequested: fd.installment || 1,
-          amountClaimed:        fd.amountPaid  || 0,
-          modeOfPay:            fd.modeOfPay   || '',
-          paymentRefId:         fd.paymentRefId || '',
-          requestDetails:       (fd.requestDetails || '').substring(0, 500),
-        },
-      };
-
-      await FirestoreService.updateLead(phone, formUpdates, formHistoryEntry);
-      console.log(`${LOG_PREFIX} Form data written for ${existing.data.cgId}`);
-    }
+    await FirestoreService.addHistory(
+      phone,
+      requirements.historyAction,
+      editor || 'system',
+      details
+    );
+    console.log(`${LOG_PREFIX} Form history recorded: ${requirements.historyAction}`);
   }
 
-  // 4c. If form data for sales_review → payment transition (Sales Approval form).
-  //     Same write-before-route ordering as 4b: stageRouter.routeLead inserts
-  //     the destination row from Firestore, so finalPrice / partialAccess /
-  //     accessThreshold / paymentDeadline must already be present.
-  if (params.formData && currentStage === 'sales_review' && newStage === 'payment') {
-    const fd = params.formData;
-    const paymentFormUpdates = {};
-
-    if (fd.finalPrice !== undefined)    paymentFormUpdates.finalPrice    = fd.finalPrice;
-    if (fd.partialAccess !== undefined) paymentFormUpdates.partialAccess = fd.partialAccess;
-    if (fd.accessThreshold !== undefined && fd.accessThreshold !== null) {
-      paymentFormUpdates.accessThreshold = fd.accessThreshold;
-    }
-    if (fd.paymentDeadline !== undefined && fd.paymentDeadline !== null) {
-      paymentFormUpdates.paymentDeadline = fd.paymentDeadline;
-    }
-
-    if (Object.keys(paymentFormUpdates).length > 0) {
-      const paymentHistoryEntry = {
-        action: 'approved_for_payment',
-        by: editor || 'system',
-        details: {
-          finalPrice:      fd.finalPrice      || 0,
-          partialAccess:   fd.partialAccess   || false,
-          accessThreshold: fd.accessThreshold || null,
-          paymentDeadline: fd.paymentDeadline || null,
-        },
-      };
-
-      await FirestoreService.updateLead(phone, paymentFormUpdates, paymentHistoryEntry);
-      console.log(`${LOG_PREFIX} Payment form data written for ${existing.data.cgId}`);
-    }
-  }
-
-  // 4d. Auto-whitelist on fulfillment stage transition
+  // ── 4c. Side effects (non-Firestore-write) ─────────────────
   if (newStage === 'fulfillment') {
     try {
-      const leadName = existing.data.name || '';
+      const leadName  = existing.data.name  || '';
       const leadPhone = existing.data.phone || phone;
-
       await FirebaseService.addToWhitelist(leadPhone, leadName, 'fulfillment_auto');
       console.log(`${LOG_PREFIX} Auto-whitelisted ${leadPhone} on fulfillment transition`);
     } catch (whitelistErr) {
-      // Log but don't block the stage transition
       console.error(`${LOG_PREFIX} Auto-whitelist FAILED for ${phone}: ${whitelistErr.message}`);
     }
   }
 
-  // 5. Route — stageRouter handles same-sheet, cross-sheet, and terminal cases.
+  // ── 5. Route to target sheet ────────────────────────────────
   try {
     const routeResult = await stageRouter.routeLead({
       phone,
