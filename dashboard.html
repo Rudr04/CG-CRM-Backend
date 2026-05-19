@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CosmoGuru · CRM Analytics</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════════════════════
@@ -182,6 +182,73 @@ body::before {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .shell { padding: 12px; }
 }
+
+/* ── Lead List ── */
+.ll-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.ll-search {
+  flex: 1; min-width: 200px; background: var(--bg-0); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 14px; font-size: 12px; font-family: var(--font-mono); outline: none;
+  transition: border-color 0.2s;
+}
+.ll-search:focus { border-color: var(--accent); }
+.ll-search::placeholder { color: var(--text-dim); }
+.ll-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.ll-table { width: 100%; border-collapse: collapse; }
+.ll-table th {
+  text-align: left; font-size: 10px; color: var(--text-dim); letter-spacing: 1.2px;
+  text-transform: uppercase; padding: 8px 12px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg-2); z-index: 2;
+}
+.ll-row { cursor: pointer; transition: background 0.15s; }
+.ll-row:hover { background: var(--bg-3); }
+.ll-row td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: middle; }
+.ll-cgid { color: var(--accent); font-weight: 600; font-size: 11px; }
+.ll-name { color: var(--text); }
+.ll-phone { color: var(--text-mid); font-size: 11px; }
+.ll-stage-badge {
+  display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 10px;
+  border-radius: 20px; letter-spacing: 0.3px; text-transform: capitalize;
+}
+.ll-expand-icon { color: var(--text-dim); font-size: 14px; transition: transform 0.25s; display: inline-block; }
+.ll-row.open .ll-expand-icon { transform: rotate(90deg); color: var(--accent); }
+
+/* History timeline */
+.ll-history-row td { padding: 0; border-bottom: 1px solid var(--border); }
+.ll-history-wrap {
+  max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s;
+  background: var(--bg-0); border-left: 2px solid var(--accent);
+  margin: 0 12px;
+}
+.ll-history-wrap.open { max-height: 2000px; padding: 16px 20px; margin: 4px 12px 8px; border-radius: 0 6px 6px 0; }
+.tl-item { display: flex; gap: 14px; position: relative; padding-bottom: 16px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: ''; position: absolute; left: 5px; top: 14px; bottom: 0;
+  width: 1px; background: var(--border-lit);
+}
+.tl-item:last-child::before { display: none; }
+.tl-dot {
+  width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+  border: 2px solid var(--accent); background: var(--bg-0);
+}
+.tl-dot.first { background: var(--accent); }
+.tl-content { flex: 1; min-width: 0; }
+.tl-action { font-size: 12px; font-weight: 600; color: var(--text); text-transform: capitalize; }
+.tl-action span { font-weight: 400; color: var(--text-mid); }
+.tl-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+.tl-details { font-size: 10px; color: var(--text-mid); margin-top: 3px; background: var(--bg-2); padding: 4px 8px; border-radius: 4px; display: inline-block; }
+
+.ll-scroll { max-height: 600px; overflow-y: auto; border-radius: var(--radius); }
+.ll-scroll::-webkit-scrollbar { width: 6px; }
+.ll-scroll::-webkit-scrollbar-track { background: var(--bg-0); }
+.ll-scroll::-webkit-scrollbar-thumb { background: var(--border-lit); border-radius: 3px; }
+.ll-more-btn {
+  display: block; width: 100%; margin-top: 10px; padding: 10px;
+  background: var(--bg-0); border: 1px dashed var(--border); border-radius: 6px;
+  color: var(--text-dim); font-size: 11px; font-family: var(--font-mono);
+  cursor: pointer; text-align: center; transition: all 0.2s;
+}
+.ll-more-btn:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -291,6 +358,34 @@ body::before {
     </div>
   </div>
 
+  <!-- ════════════════════════ LEAD LIST ════════════════════════ -->
+  <div class="card full">
+    <div class="card-head">
+      <span class="card-title">Lead Directory</span>
+      <span class="card-sub" id="llSub"></span>
+    </div>
+    <div class="ll-controls">
+      <input type="text" class="ll-search" id="llSearch" placeholder="Search by ID, name, number, stage…" oninput="filterLeadList()">
+      <span class="ll-count" id="llCount"></span>
+    </div>
+    <div class="ll-scroll" id="llScroll">
+      <table class="ll-table">
+        <thead><tr>
+          <th style="width:28px"></th>
+          <th>CGID</th>
+          <th>Name</th>
+          <th>Number</th>
+          <th>Stage</th>
+          <th>Status</th>
+          <th>Agent</th>
+          <th>Date</th>
+        </tr></thead>
+        <tbody id="llBody"></tbody>
+      </table>
+    </div>
+    <button class="ll-more-btn" id="llMoreBtn" onclick="loadMoreLeads()" style="display:none">Load more…</button>
+  </div>
+
   <div class="footer" id="footer"></div>
 </div>
 
@@ -298,7 +393,7 @@ body::before {
 // ═══════════════════════════════════════════════════════════════
 //  CONFIG — Change this to your deployed Cloud Run URL
 // ═══════════════════════════════════════════════════════════════
-const API_BASE = 'https://cg-crm-backend-646797305264.asia-south1.run.app'; // e.g. 'https://cg-crm-backend-xxxxx-el.a.run.app'
+const API_BASE = ''; // e.g. 'https://cg-crm-backend-xxxxx-el.a.run.app'
 const ENDPOINT = '/dashboard-data';
 
 // ═══════════════════════════════════════════════════════════════
@@ -325,6 +420,9 @@ const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 let leads = [];
 let charts = {};
 let activePreset = 2;
+let llFiltered = [];
+let llPage = 0;
+const LL_PER_PAGE = 50;
 
 // ═══════════════════════════════════════════════════════════════
 //  DATE HELPERS
@@ -445,6 +543,7 @@ function renderAll() {
   renderStageTime();
   renderHeatmap();
   renderHourly();
+  renderLeadList();
 }
 
 // ── KPIs ──
@@ -779,6 +878,182 @@ function renderHourly() {
       }
     }
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LEAD LIST
+// ═══════════════════════════════════════════════════════════════
+
+const STAGE_BADGE_COLORS = {
+  unclaimed:     { bg: '#1e2840', color: '#8a9ab5' },
+  agent_working: { bg: 'rgba(0,212,255,0.12)', color: '#00d4ff' },
+  sales_review:  { bg: 'rgba(180,122,255,0.12)', color: '#b47aff' },
+  payment:       { bg: 'rgba(255,179,71,0.12)', color: '#ffb347' },
+  fulfillment:   { bg: 'rgba(45,212,191,0.12)', color: '#2dd4bf' },
+  completed:     { bg: 'rgba(0,230,138,0.12)', color: '#00e68a' },
+  dead:          { bg: 'rgba(255,107,107,0.12)', color: '#ff6b6b' },
+};
+
+const ACTION_LABELS = {
+  lead_created: '🟢 Lead Created',
+  contact_updated: '📝 Contact Updated',
+  name_updated: '✏️ Name Updated',
+  location_updated: '📍 Location Updated',
+  inquiry_changed: '🔄 Inquiry Changed',
+  product_added: '📦 Product Added',
+  claimed: '👤 Assigned to Agent',
+  status_changed: '📊 Status Changed',
+  rating_changed: '⭐ Rating Changed',
+  remark_added: '💬 Remark Added',
+  stage_transition: '🔀 Stage Transition',
+  stage_changed: '🔀 Stage Changed',
+  sales_remark_added: '📋 Sales Remark',
+  fulfillment_status_changed: '📦 Fulfillment Updated',
+  fulfillment_remark_added: '📦 Fulfillment Remark',
+  message_sent: '📤 Message Sent',
+  message_received: '📥 Message Received',
+  flow_reply: '📝 Flow Reply',
+  form_submitted: '📄 Form Submitted',
+  payment_received: '💰 Payment Received',
+  group_joined: '👥 Group Joined',
+  attendance_marked: '✅ Attendance',
+};
+
+function stageBadge(stage) {
+  const s = STAGE_BADGE_COLORS[stage] || STAGE_BADGE_COLORS.unclaimed;
+  const label = STAGE_LABELS[stage] || stage || '—';
+  return `<span class="ll-stage-badge" style="background:${s.bg};color:${s.color}">${label}</span>`;
+}
+
+function maskPhone(phone) {
+  if (!phone || phone.length < 6) return phone || '—';
+  return phone.slice(0, -4).replace(/./g, '•') + phone.slice(-4);
+}
+
+function formatHistoryTime(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch { return isoStr; }
+}
+
+function formatDetails(details) {
+  if (!details || typeof details !== 'object') return '';
+  const parts = [];
+  for (const [k, v] of Object.entries(details)) {
+    if (v && typeof v === 'string' && v.length < 100) {
+      parts.push(`<strong>${k}:</strong> ${v}`);
+    } else if (v && typeof v === 'object') {
+      // stage transition details like {from, to}
+      for (const [sk, sv] of Object.entries(v)) {
+        if (sv) parts.push(`<strong>${sk}:</strong> ${sv}`);
+      }
+    }
+  }
+  return parts.length ? `<div class="tl-details">${parts.join(' · ')}</div>` : '';
+}
+
+function renderLeadList() {
+  llPage = 0;
+  llFiltered = [...leads].reverse(); // newest first
+  document.getElementById('llSearch').value = '';
+  renderLeadPage();
+}
+
+function filterLeadList() {
+  const q = document.getElementById('llSearch').value.toLowerCase().trim();
+  llPage = 0;
+  if (!q) {
+    llFiltered = [...leads].reverse();
+  } else {
+    llFiltered = leads.filter(l =>
+      (l.cgId && l.cgId.toLowerCase().includes(q)) ||
+      (l.name && l.name.toLowerCase().includes(q)) ||
+      (l.phone && l.phone.includes(q)) ||
+      (l.stage && l.stage.toLowerCase().includes(q)) ||
+      (l.status && l.status.toLowerCase().includes(q)) ||
+      (l.agent && l.agent.toLowerCase().includes(q))
+    ).reverse();
+  }
+  renderLeadPage();
+}
+
+function renderLeadPage() {
+  const end = (llPage + 1) * LL_PER_PAGE;
+  const visible = llFiltered.slice(0, end);
+  const hasMore = end < llFiltered.length;
+
+  document.getElementById('llSub').textContent = `${llFiltered.length} leads`;
+  document.getElementById('llCount').textContent = `Showing ${visible.length} of ${llFiltered.length}`;
+
+  const tbody = document.getElementById('llBody');
+  tbody.innerHTML = visible.map((l, i) => `
+    <tr class="ll-row" id="llr-${i}" onclick="toggleHistory(${i})">
+      <td><span class="ll-expand-icon">›</span></td>
+      <td><span class="ll-cgid">${l.cgId || '—'}</span></td>
+      <td class="ll-name">${l.name || '—'}</td>
+      <td class="ll-phone">${maskPhone(l.phone)}</td>
+      <td>${stageBadge(l.stage)}</td>
+      <td style="font-size:11px;color:var(--text-mid)">${l.status || '—'}</td>
+      <td style="font-size:11px;color:var(--text-mid)">${l.agent || '—'}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${l.date || '—'}</td>
+    </tr>
+    <tr class="ll-history-row" id="llh-${i}">
+      <td colspan="8">
+        <div class="ll-history-wrap" id="llhw-${i}">
+          ${renderTimeline(l.history)}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  const btn = document.getElementById('llMoreBtn');
+  btn.style.display = hasMore ? 'block' : 'none';
+  btn.textContent = `Load more… (${llFiltered.length - end} remaining)`;
+}
+
+function loadMoreLeads() {
+  llPage++;
+  renderLeadPage();
+}
+
+function toggleHistory(i) {
+  const row = document.getElementById('llr-' + i);
+  const wrap = document.getElementById('llhw-' + i);
+  const isOpen = row.classList.contains('open');
+
+  // Close all others
+  document.querySelectorAll('.ll-row.open').forEach(r => {
+    r.classList.remove('open');
+    const idx = r.id.split('-')[1];
+    document.getElementById('llhw-' + idx)?.classList.remove('open');
+  });
+
+  if (!isOpen) {
+    row.classList.add('open');
+    wrap.classList.add('open');
+  }
+}
+
+function renderTimeline(history) {
+  if (!history || !history.length) return '<div style="padding:12px;color:var(--text-dim);font-size:11px">No history entries</div>';
+
+  // Render newest first
+  const items = [...history].reverse();
+  return items.map((h, i) => {
+    const actionLabel = ACTION_LABELS[h.action] || h.action || 'Unknown';
+    const isFirst = i === items.length - 1; // original first entry (lead_created)
+    return `
+      <div class="tl-item">
+        <div class="tl-dot ${isFirst ? 'first' : ''}"></div>
+        <div class="tl-content">
+          <div class="tl-action">${actionLabel}${h.by && h.by !== 'system' ? ` <span>by ${h.by}</span>` : ''}</div>
+          <div class="tl-meta">${formatHistoryTime(h.at)}</div>
+          ${formatDetails(h.details)}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════

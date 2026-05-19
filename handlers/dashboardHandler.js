@@ -103,6 +103,8 @@ async function handleDashboardRequest(req, res) {
 
       leads.push({
         cgId:      d.cgId || '',
+        name:      d.name || '',
+        phone:     d.phone || '',
         date:      parsed.dateStr,
         hour:      parsed.hour,
         dayOfWeek: parsed.dayOfWeek,
@@ -114,6 +116,7 @@ async function handleDashboardRequest(req, res) {
         product:   d.product || '',
         converted: CONVERTED_STATUSES.includes(d.status),
         channel:   (d.history && d.history[0]?.details?.channel) || d.channel || '',
+        history:   Array.isArray(d.history) ? d.history : [],
       });
     });
 
