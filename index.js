@@ -66,6 +66,12 @@ functions.http('webhook', async (req, res) => {
     if (req.path === '/dashboard-data') {
       return handleDashboardRequest(req, res);
     }
+    if (req.path === '/dashboard') {
+      const fs = require('fs');
+      const html = fs.readFileSync(__dirname + '/dashboard.html', 'utf8');
+      res.set('Content-Type', 'text/html');
+      return res.status(200).send(html);
+    }
     return res.status(200).send('CosmoGuru Webhook is running.');
   }
 
