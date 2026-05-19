@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CosmoGuru · CRM Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — Industrial Command Center
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg-0: #070a0f;
+  --bg-1: #0c1017;
+  --bg-2: #111621;
+  --bg-3: #181f2e;
+  --border: #1e2840;
+  --border-lit: #2a3654;
+  --text: #d4dce8;
+  --text-mid: #8a9ab5;
+  --text-dim: #4e5d78;
+  --accent: #00d4ff;
+  --accent-soft: rgba(0,212,255,0.10);
+  --accent-glow: rgba(0,212,255,0.25);
+  --green: #00e68a;
+  --green-soft: rgba(0,230,138,0.10);
+  --amber: #ffb347;
+  --amber-soft: rgba(255,179,71,0.10);
+  --red: #ff6b6b;
+  --red-soft: rgba(255,107,107,0.10);
+  --purple: #b47aff;
+  --purple-soft: rgba(180,122,255,0.10);
+  --cyan-dim: #1a6b80;
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Subtle noise texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+.shell { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 20px 24px 40px; }
+
+/* ── Header ── */
+.hdr { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.hdr-left { display: flex; align-items: center; gap: 12px; }
+.hdr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent-glow), 0 0 4px var(--accent); animation: pulse 2.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+.hdr-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+.hdr-badge { font-size: 10px; color: var(--text-mid); background: var(--bg-2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 4px; letter-spacing: 1.5px; text-transform: uppercase; }
+.hdr-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px; }
+
+/* ── Date Controls ── */
+.date-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.preset-btn {
+  background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+  border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: var(--font-mono); letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+.preset-btn:hover { border-color: var(--border-lit); color: var(--text-mid); }
+.preset-btn.active { background: var(--accent); color: var(--bg-0); border-color: var(--accent); }
+.date-input {
+  background: var(--bg-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 5px; padding: 5px 10px; font-size: 11px; font-family: var(--font-mono);
+  outline: none; transition: border-color 0.2s;
+}
+.date-input:focus { border-color: var(--accent); }
+.date-arrow { color: var(--text-dim); font-size: 10px; margin: 0 2px; }
+.fetch-btn {
+  background: var(--accent); color: var(--bg-0); border: none; border-radius: 5px;
+  padding: 5px 16px; font-size: 11px; font-weight: 700; cursor: pointer;
+  font-family: var(--font-mono); letter-spacing: 0.5px; transition: all 0.2s;
+}
+.fetch-btn:hover { box-shadow: 0 0 16px var(--accent-glow); }
+.fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── KPI Cards ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px 18px; position: relative; overflow: hidden;
+  transition: border-color 0.25s, transform 0.2s;
+}
+.kpi:hover { border-color: var(--border-lit); transform: translateY(-1px); }
+.kpi-icon { position: absolute; top: 12px; right: 14px; font-size: 20px; opacity: 0.15; }
+.kpi-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 8px; }
+.kpi-value { font-family: var(--font-display); font-size: 28px; font-weight: 800; line-height: 1; }
+.kpi-sub { font-size: 11px; opacity: 0.6; margin-top: 5px; }
+
+/* ── Chart Cards ── */
+.grid-2 { display: grid; grid-template-columns: 1.8fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid-2b { display: grid; grid-template-columns: 1fr 1.6fr; gap: 12px; margin-bottom: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 12px; margin-bottom: 12px; }
+.grid-2e { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.full { margin-bottom: 12px; }
+
+.card {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 18px 20px; overflow: hidden;
+}
+.card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.card-title { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--text); }
+.card-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px; }
+.chart-wrap { position: relative; height: 260px; }
+.chart-wrap-sm { position: relative; height: 220px; }
+
+/* ── Horizontal Bar (funnel, status) ── */
+.hbar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.hbar-label { width: 100px; font-size: 10px; color: var(--text-mid); text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { flex: 1; height: 22px; background: var(--bg-0); border-radius: 4px; overflow: hidden; position: relative; }
+.hbar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
+.hbar-fill span { font-size: 10px; font-weight: 600; color: var(--bg-0); }
+.hbar-val-out { position: absolute; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--text-dim); }
+
+/* ── Heatmap ── */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 48px repeat(24, 1fr);
+  gap: 2px;
+  font-size: 10px;
+}
+.hm-header { color: var(--text-dim); text-align: center; padding: 4px 0; font-weight: 500; }
+.hm-day-label { color: var(--text-mid); display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-weight: 500; }
+.hm-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  min-height: 18px;
+  transition: all 0.15s;
+  cursor: default;
+  position: relative;
+}
+.hm-cell:hover { transform: scale(1.3); z-index: 2; box-shadow: 0 0 8px rgba(0,212,255,0.3); }
+.hm-cell[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+  background: var(--bg-3); color: var(--text); border: 1px solid var(--border-lit);
+  padding: 3px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; z-index: 10;
+  pointer-events: none;
+}
+
+/* ── Loading / Error ── */
+.status-bar {
+  text-align: center; padding: 32px; color: var(--text-dim);
+  font-size: 12px; letter-spacing: 0.5px;
+}
+.status-bar.err { color: var(--red); }
+.loader { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Footer ── */
+.footer { text-align: center; font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px; padding-top: 12px; }
+.footer code { color: var(--accent); background: var(--bg-2); padding: 2px 6px; border-radius: 3px; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .grid-2, .grid-2b, .grid-3, .grid-2e { grid-template-columns: 1fr; }
+  .hdr { flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .shell { padding: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- ════════════════════════ HEADER ════════════════════════ -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-left">
+        <div class="hdr-dot"></div>
+        <span class="hdr-title">CosmoGuru</span>
+        <span class="hdr-badge">CRM Analytics</span>
+      </div>
+      <div class="hdr-sub">Pipeline Intelligence · Lead Metrics · Agent Performance</div>
+    </div>
+    <div class="date-bar">
+      <button class="preset-btn" onclick="selectPreset(0)">Today</button>
+      <button class="preset-btn" onclick="selectPreset(1)">7D</button>
+      <button class="preset-btn active" onclick="selectPreset(2)">30D</button>
+      <button class="preset-btn" onclick="selectPreset(3)">90D</button>
+      <button class="preset-btn" onclick="selectPreset(4)">All</button>
+      <input type="date" id="fromDate" class="date-input" onchange="clearPreset()">
+      <span class="date-arrow">→</span>
+      <input type="date" id="toDate" class="date-input" onchange="clearPreset()">
+      <button class="fetch-btn" id="fetchBtn" onclick="fetchData()">Load</button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ KPI ROW ════════════════════════ -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- ════════════════════════ ROW 1: Trend + Funnel ════════════════════════ -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Daily Lead Volume</span>
+        <span class="card-sub" id="trendSub"></span>
+      </div>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Pipeline Funnel</span>
+        <span class="card-sub">By stage</span>
+      </div>
+      <div id="funnelWrap"></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ ROW 2: Source + Agent ════════════════════════ -->
+  <div class="grid-2b">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Lead Sources</span>
+        <span class="card-sub">Distribution</span>
+      </div>
+      <div class="chart-wrap"><canvas id="sourceChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Agent Performance</span>
+        <span class="card-sub">Leads handled vs converted</span>
+      </div>
+      <div class="chart-wrap"><canvas id="agentChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ ROW 3: Status + Inquiry + Stage/Time ════════════════════════ -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Status Breakdown</span>
+        <span class="card-sub" id="statusSub"></span>
+      </div>
+      <div id="statusWrap"></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Inquiry Split</span>
+        <span class="card-sub">By brand</span>
+      </div>
+      <div class="chart-wrap-sm"><canvas id="inquiryChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Stage Over Time</span>
+        <span class="card-sub">Stacked daily</span>
+      </div>
+      <div class="chart-wrap"><canvas id="stageTimeChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ ROW 4: Heatmap + Hourly ════════════════════════ -->
+  <div class="grid-2e">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Day × Hour Heatmap</span>
+        <span class="card-sub">When leads arrive</span>
+      </div>
+      <div id="heatmapWrap"></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Hourly Distribution</span>
+        <span class="card-sub">Leads per hour of day</span>
+      </div>
+      <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="footer" id="footer"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG — Change this to your deployed Cloud Run URL
+// ═══════════════════════════════════════════════════════════════
+const API_BASE = 'https://cg-crm-backend-646797305264.asia-south1.run.app'; // e.g. 'https://cg-crm-backend-xxxxx-el.a.run.app'
+const ENDPOINT = '/dashboard-data';
+
+// ═══════════════════════════════════════════════════════════════
+//  THEME CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const CLR = {
+  accent: '#00d4ff', green: '#00e68a', amber: '#ffb347', red: '#ff6b6b',
+  purple: '#b47aff', teal: '#2dd4bf', pink: '#f472b6', orange: '#fb923c',
+  lime: '#a3e635', sky: '#38bdf8', rose: '#fb7185', indigo: '#818cf8',
+};
+const PALETTE = [CLR.accent, CLR.green, CLR.amber, CLR.purple, CLR.teal, CLR.pink, CLR.orange, CLR.lime, CLR.sky, CLR.rose, CLR.indigo, CLR.red];
+const FUNNEL_COLORS = [CLR.accent, '#60a5fa', CLR.indigo, CLR.purple, CLR.pink, CLR.green, '#475569'];
+
+const STAGE_ORDER = ['unclaimed','agent_working','sales_review','payment','fulfillment','completed','dead'];
+const STAGE_LABELS = {
+  unclaimed:'Unclaimed', agent_working:'Agent Working', sales_review:'Sales Review',
+  payment:'Payment', fulfillment:'Fulfillment', completed:'Completed', dead:'Dead'
+};
+const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let leads = [];
+let charts = {};
+let activePreset = 2;
+
+// ═══════════════════════════════════════════════════════════════
+//  DATE HELPERS
+// ═══════════════════════════════════════════════════════════════
+const today = new Date();
+const fmtDate = (d) => d.toISOString().split('T')[0];
+const daysAgo = (n) => { const d = new Date(today); d.setDate(d.getDate() - n); return d; };
+
+const PRESETS = [
+  { label: 'Today', from: today, to: today },
+  { label: '7D',    from: daysAgo(6), to: today },
+  { label: '30D',   from: daysAgo(29), to: today },
+  { label: '90D',   from: daysAgo(89), to: today },
+  { label: 'All',   from: daysAgo(365), to: today },
+];
+
+function selectPreset(i) {
+  activePreset = i;
+  document.getElementById('fromDate').value = fmtDate(PRESETS[i].from);
+  document.getElementById('toDate').value = fmtDate(PRESETS[i].to);
+  document.querySelectorAll('.preset-btn').forEach((b, idx) => b.classList.toggle('active', idx === i));
+  fetchData();
+}
+
+function clearPreset() {
+  activePreset = -1;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA FETCH
+// ═══════════════════════════════════════════════════════════════
+async function fetchData() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  if (!from || !to) return;
+
+  const btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  btn.textContent = '···';
+
+  try {
+    if (!API_BASE) {
+      // ── No backend configured — show instruction ──
+      document.getElementById('footer').innerHTML =
+        '<span style="color:var(--red)">⚠ API_BASE not set.</span> Set <code>API_BASE</code> in the script to your Cloud Run URL, then reload.';
+      btn.disabled = false; btn.textContent = 'Load';
+      return;
+    }
+
+    const url = `${API_BASE}${ENDPOINT}?from=${from}&to=${to}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (!data.success || !Array.isArray(data.leads)) throw new Error('Bad response format');
+
+    leads = data.leads;
+    renderAll();
+    document.getElementById('footer').innerHTML =
+      `${leads.length} leads · ${from} → ${to} · Fetched from <code>${API_BASE}${ENDPOINT}</code>`;
+
+  } catch (err) {
+    console.error('Fetch error:', err);
+    document.getElementById('footer').innerHTML =
+      `<span style="color:var(--red)">Error: ${err.message}</span> — check <code>API_BASE</code> and ensure handler is deployed.`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CHART.JS DEFAULTS
+// ═══════════════════════════════════════════════════════════════
+Chart.defaults.color = '#6b7a94';
+Chart.defaults.borderColor = '#1e2840';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.plugins.legend.labels.boxWidth = 10;
+Chart.defaults.plugins.legend.labels.padding = 12;
+Chart.defaults.plugins.tooltip.backgroundColor = '#111621';
+Chart.defaults.plugins.tooltip.borderColor = '#2a3654';
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.titleFont = { family: "'IBM Plex Mono', monospace", size: 11 };
+Chart.defaults.plugins.tooltip.bodyFont = { family: "'IBM Plex Mono', monospace", size: 11 };
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.cornerRadius = 6;
+
+function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+// ═══════════════════════════════════════════════════════════════
+//  AGGREGATE HELPERS
+// ═══════════════════════════════════════════════════════════════
+function countBy(arr, key) {
+  const m = {};
+  arr.forEach(l => { const v = l[key] || '(empty)'; m[v] = (m[v]||0)+1; });
+  return m;
+}
+
+function sortedEntries(obj, limit) {
+  let entries = Object.entries(obj).sort((a,b) => b[1]-a[1]);
+  if (limit) entries = entries.slice(0, limit);
+  return entries;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER ALL
+// ═══════════════════════════════════════════════════════════════
+function renderAll() {
+  renderKPIs();
+  renderTrend();
+  renderFunnel();
+  renderSources();
+  renderAgents();
+  renderStatus();
+  renderInquiry();
+  renderStageTime();
+  renderHeatmap();
+  renderHourly();
+}
+
+// ── KPIs ──
+function renderKPIs() {
+  const total = leads.length;
+  const converted = leads.filter(l => l.converted).length;
+  const dead = leads.filter(l => l.stage === 'dead').length;
+  const active = leads.filter(l => !['completed','dead'].includes(l.stage)).length;
+  const agents = new Set(leads.filter(l => l.agent !== 'Not Assigned').map(l => l.agent)).size;
+  const convRate = total ? ((converted/total)*100).toFixed(1) : '0.0';
+  const deadRate = total ? ((dead/total)*100).toFixed(1) : '0.0';
+
+  const kpis = [
+    { label:'Total Leads', value:total.toLocaleString(), color:'accent', icon:'◆' },
+    { label:'Converted', value:converted.toLocaleString(), sub:`${convRate}% rate`, color:'green', icon:'▲' },
+    { label:'Active Pipeline', value:active.toLocaleString(), color:'purple', icon:'●' },
+    { label:'Dead Leads', value:dead.toLocaleString(), sub:`${deadRate}% rate`, color:'red', icon:'✕' },
+    { label:'Active Agents', value:agents, color:'amber', icon:'★' },
+  ];
+
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+    <div class="kpi" style="--c:var(--${k.color})">
+      <div class="kpi-icon" style="color:var(--${k.color})">${k.icon}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value" style="color:var(--${k.color})">${k.value}</div>
+      ${k.sub ? `<div class="kpi-sub" style="color:var(--${k.color})">${k.sub}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Daily Trend ──
+function renderTrend() {
+  const byDate = {};
+  leads.forEach(l => { byDate[l.date] = (byDate[l.date]||0)+1; });
+  const sorted = Object.entries(byDate).sort(([a],[b]) => a.localeCompare(b));
+  const labels = sorted.map(([d]) => d.slice(5));
+  const data = sorted.map(([,v]) => v);
+
+  document.getElementById('trendSub').textContent = `${sorted.length} days`;
+
+  destroyChart('trend');
+  charts.trend = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Leads',
+        data,
+        borderColor: CLR.accent,
+        backgroundColor: 'rgba(0,212,255,0.08)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: CLR.accent,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } },
+        y: { beginAtZero: true, grid: { color: '#1e2840' } }
+      }
+    }
+  });
+}
+
+// ── Pipeline Funnel ──
+function renderFunnel() {
+  const counts = {};
+  STAGE_ORDER.forEach(s => counts[s] = 0);
+  leads.forEach(l => { if (counts[l.stage] !== undefined) counts[l.stage]++; });
+  const maxVal = Math.max(...Object.values(counts), 1);
+
+  document.getElementById('funnelWrap').innerHTML = STAGE_ORDER.map((s, i) => {
+    const v = counts[s];
+    const pct = (v / maxVal) * 100;
+    const color = FUNNEL_COLORS[i] || CLR.accent;
+    return `
+      <div class="hbar-row">
+        <div class="hbar-label">${STAGE_LABELS[s]}</div>
+        <div class="hbar-track">
+          <div class="hbar-fill" style="width:${Math.max(pct,2)}%;background:${color};opacity:0.85">
+            ${pct > 18 ? `<span>${v}</span>` : ''}
+          </div>
+          ${pct <= 18 ? `<div class="hbar-val-out" style="left:${pct+3}%">${v}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Sources (Doughnut) ──
+function renderSources() {
+  const map = countBy(leads, 'source');
+  const entries = sortedEntries(map);
+
+  destroyChart('source');
+  charts.source = new Chart(document.getElementById('sourceChart'), {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(([k]) => k),
+      datasets: [{
+        data: entries.map(([,v]) => v),
+        backgroundColor: entries.map((_,i) => PALETTE[i % PALETTE.length]),
+        borderColor: '#111621',
+        borderWidth: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '55%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 10, font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── Agent Performance ──
+function renderAgents() {
+  const map = {};
+  leads.filter(l => l.agent !== 'Not Assigned').forEach(l => {
+    if (!map[l.agent]) map[l.agent] = { total: 0, converted: 0 };
+    map[l.agent].total++;
+    if (l.converted) map[l.agent].converted++;
+  });
+  const sorted = Object.entries(map).sort((a,b) => b[1].total - a[1].total).slice(0, 12);
+  const labels = sorted.map(([n]) => n.length > 10 ? n.slice(0,10)+'…' : n);
+
+  destroyChart('agent');
+  charts.agent = new Chart(document.getElementById('agentChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Total', data: sorted.map(([,d]) => d.total), backgroundColor: CLR.accent+'99', borderRadius: 3 },
+        { label: 'Converted', data: sorted.map(([,d]) => d.converted), backgroundColor: CLR.green, borderRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, grid: { color: '#1e2840' } }
+      }
+    }
+  });
+}
+
+// ── Status Breakdown ──
+function renderStatus() {
+  const map = countBy(leads, 'status');
+  const entries = sortedEntries(map, 10);
+  const maxVal = entries.length ? entries[0][1] : 1;
+
+  document.getElementById('statusSub').textContent = `Top ${entries.length}`;
+  document.getElementById('statusWrap').innerHTML = entries.map(([name, val], i) => {
+    const pct = (val / maxVal) * 100;
+    const color = PALETTE[i % PALETTE.length];
+    return `
+      <div class="hbar-row">
+        <div class="hbar-label" title="${name}">${name}</div>
+        <div class="hbar-track">
+          <div class="hbar-fill" style="width:${pct}%;background:${color};opacity:0.65"></div>
+        </div>
+        <span style="font-size:10px;color:var(--text-dim);min-width:30px;text-align:right">${val}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Inquiry Split (Pie) ──
+function renderInquiry() {
+  const map = countBy(leads, 'inquiry');
+  const entries = sortedEntries(map);
+
+  destroyChart('inquiry');
+  charts.inquiry = new Chart(document.getElementById('inquiryChart'), {
+    type: 'pie',
+    data: {
+      labels: entries.map(([k]) => k),
+      datasets: [{
+        data: entries.map(([,v]) => v),
+        backgroundColor: entries.map((_,i) => PALETTE[(i+4) % PALETTE.length]),
+        borderColor: '#111621',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 8, font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── Stage Over Time (Stacked Area) ──
+function renderStageTime() {
+  const byDate = {};
+  leads.forEach(l => {
+    if (!byDate[l.date]) { byDate[l.date] = {}; STAGE_ORDER.forEach(s => byDate[l.date][s] = 0); }
+    if (byDate[l.date][l.stage] !== undefined) byDate[l.date][l.stage]++;
+  });
+  const sorted = Object.entries(byDate).sort(([a],[b]) => a.localeCompare(b));
+  const labels = sorted.map(([d]) => d.slice(5));
+
+  destroyChart('stageTime');
+  charts.stageTime = new Chart(document.getElementById('stageTimeChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: STAGE_ORDER.map((s, i) => ({
+        label: STAGE_LABELS[s],
+        data: sorted.map(([, counts]) => counts[s]),
+        backgroundColor: FUNNEL_COLORS[i] + '99',
+        borderColor: FUNNEL_COLORS[i],
+        borderWidth: 1.5,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 9 }, boxWidth: 8 } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { size: 9 } }, stacked: true },
+        y: { stacked: true, beginAtZero: true, grid: { color: '#1e2840' } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DAY × HOUR HEATMAP
+// ═══════════════════════════════════════════════════════════════
+function renderHeatmap() {
+  // Build matrix: DAY_ORDER (rows) × 24 hours (cols)
+  const matrix = {};
+  DAY_ORDER.forEach(d => { matrix[d] = new Array(24).fill(0); });
+
+  leads.forEach(l => {
+    const day = l.dayOfWeek; // 'Mon','Tue', etc.
+    const h = l.hour;       // 0-23
+    if (matrix[day] && h >= 0 && h < 24) matrix[day][h]++;
+  });
+
+  // Find max for color scale
+  let maxVal = 0;
+  DAY_ORDER.forEach(d => { matrix[d].forEach(v => { if (v > maxVal) maxVal = v; }); });
+  if (!maxVal) maxVal = 1;
+
+  // Color interpolation: bg-0 → accent
+  function heatColor(val) {
+    if (val === 0) return 'var(--bg-1)';
+    const t = val / maxVal;
+    // From dark teal to bright cyan
+    const r = Math.round(7 + t * (0 - 7));
+    const g = Math.round(16 + t * (212 - 16));
+    const b = Math.round(23 + t * (255 - 23));
+    const a = 0.25 + t * 0.75;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // Build HTML
+  let html = '<div class="heatmap-grid">';
+  // Header row
+  html += '<div></div>'; // empty corner
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="hm-header">${h}</div>`;
+  }
+  // Data rows
+  DAY_ORDER.forEach(day => {
+    html += `<div class="hm-day-label">${day}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const v = matrix[day][h];
+      html += `<div class="hm-cell" style="background:${heatColor(v)}" data-tooltip="${day} ${String(h).padStart(2,'0')}:00 — ${v} leads"></div>`;
+    }
+  });
+  html += '</div>';
+
+  // Legend
+  html += `<div style="display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:flex-end">
+    <span style="font-size:10px;color:var(--text-dim)">0</span>
+    <div style="display:flex;gap:1px">`;
+  for (let i = 0; i <= 8; i++) {
+    html += `<div style="width:16px;height:10px;border-radius:2px;background:${heatColor((i/8)*maxVal)}"></div>`;
+  }
+  html += `</div><span style="font-size:10px;color:var(--text-dim)">${maxVal}</span></div>`;
+
+  document.getElementById('heatmapWrap').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HOURLY DISTRIBUTION
+// ═══════════════════════════════════════════════════════════════
+function renderHourly() {
+  const hourCounts = new Array(24).fill(0);
+  leads.forEach(l => { if (l.hour >= 0 && l.hour < 24) hourCounts[l.hour]++; });
+
+  const labels = Array.from({length:24}, (_,i) => `${String(i).padStart(2,'0')}:00`);
+
+  // Color gradient: dim for off-hours, bright for peak
+  const maxH = Math.max(...hourCounts, 1);
+  const bgColors = hourCounts.map(v => {
+    const t = v / maxH;
+    return `rgba(0, ${Math.round(140 + t*72)}, ${Math.round(180 + t*75)}, ${0.3 + t*0.7})`;
+  });
+
+  destroyChart('hourly');
+  charts.hourly = new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Leads',
+        data: hourCounts,
+        backgroundColor: bgColors,
+        borderRadius: 3,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45 } },
+        y: { beginAtZero: true, grid: { color: '#1e2840' } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  selectPreset(2); // default 30D
+});
+</script>
+</body>
+</html>

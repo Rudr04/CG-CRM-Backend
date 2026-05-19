@@ -12,6 +12,7 @@ const config = require('./config');
 const { routeEvent, shouldSkipDuplicate } = require('./lib/router');
 const { errorToResponse } = require('./lib/errorHandler');
 const PendingQueue = require('./services/pendingQueue');
+const { handleDashboardRequest } = require('./handlers/dashboardHandler');
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,8 +61,11 @@ function generateEventId(params) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 functions.http('webhook', async (req, res) => {
-  // Health check
+  // Inside the webhook function, replace the GET block:
   if (req.method === 'GET') {
+    if (req.path === '/dashboard-data') {
+      return handleDashboardRequest(req, res);
+    }
     return res.status(200).send('CosmoGuru Webhook is running.');
   }
 
