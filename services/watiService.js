@@ -96,7 +96,7 @@ async function setContactAttribute(waId, attrName, attrValue) {
     await watiRequest('post', endpoint, {
       customParams: [{ name: attrName, value: attrValue }]
     });
-    console.log(`${LOG_PREFIX} Set ${attrName}=${attrValue} for ${cleanPhone}`);
+    console.log(`${LOG_PREFIX} Set ${attrName}=${attrValue} for ${waId}`);
     return true;
   } catch (error) {
     console.error(`${LOG_PREFIX} setContactAttribute(${attrName}) error:`, error.message);
@@ -113,12 +113,11 @@ async function startChatbot(waId, chatbotId) {
   if (!waId) throw new ValidationError('Phone number (waId) is required');
   if (!chatbotId) throw new ValidationError('Chatbot ID is required');
 
-  const cleanPhone = normalizePhone(waId);
-  const endpoint = `/api/v2/startChatbot/${chatbotId}?whatsappNumber=${cleanPhone}`;
+  const endpoint = `/api/v1/chatbots/start?whatsappNumber=${waId}&chatbotId=${chatbotId}`;
 
   try {
     const response = await watiRequest('post', endpoint);
-    console.log(`${LOG_PREFIX} Started chatbot ${chatbotId} for ${cleanPhone}`);
+    console.log(`${LOG_PREFIX} Started chatbot ${chatbotId} for ${waId}`);
     return response.status === 200;
   } catch (error) {
     console.error(`${LOG_PREFIX} startChatbot(${chatbotId}) error:`, error.message);
