@@ -26,6 +26,7 @@ const ONBOARDING_CHATBOTS = [
 
 const TEST_PHONES = new Set([
   '918469346151', // your test number
+  '919825975070', // add more test numbers as needed
 ]);
 
 // ═════════════════════════════════════════════════════════════
