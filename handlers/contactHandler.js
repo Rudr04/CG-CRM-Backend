@@ -24,6 +24,10 @@ const ONBOARDING_CHATBOTS = [
   '69691e0302430341c43f1352',
 ];
 
+const TEST_PHONES = new Set([
+  '918469346151', // your test number
+]);
+
 // ═════════════════════════════════════════════════════════════
 //  HANDLE NEW CONTACT (WATI: newContactMessageReceived)
 // ═════════════════════════════════════════════════════════════
@@ -375,6 +379,7 @@ async function handleUserLogin(params) {
 }
 
 function triggerWatiOnboarding(phone) {
+  if (!TEST_PHONES.has(phone)) return; // skip everyone else during testing  
   const waId = phone; // already validated/cleaned by caller
 
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
