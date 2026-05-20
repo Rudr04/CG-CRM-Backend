@@ -187,7 +187,6 @@ module.exports = {
   setWaidAttribute,
   setContactAttribute,
   startChatbot,
-  setRegistrationApprovalAttribute,
   sendRegistrationConfirmation,
   getContactDetails
 };
