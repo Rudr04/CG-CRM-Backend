@@ -73,11 +73,57 @@ async function setWaidAttribute(params) {
 
   const endpoint = `/api/v1/updateContactAttributes/${waId}`;
   const response = await watiRequest('post', endpoint, {
-    customParams: [{ name: 'waid', value: waId }]
+    customParams: [
+      { name: 'waid', value: waId },
+      { name: 'mc_form_filled', value: 'FALSE' }
+    ]
   });
   
   console.log(`${LOG_PREFIX} Set waid attribute for ${waId}`);
   return response.status === 200;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GENERIC CONTACT ATTRIBUTE
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function setContactAttribute(waId, attrName, attrValue) {
+  if (!waId) throw new ValidationError('Phone number (waId) is required');
+
+  const endpoint = `/api/v1/updateContactAttributes/${waId}`;
+
+  try {
+    await watiRequest('post', endpoint, {
+      customParams: [{ name: attrName, value: attrValue }]
+    });
+    console.log(`${LOG_PREFIX} Set ${attrName}=${attrValue} for ${cleanPhone}`);
+    return true;
+  } catch (error) {
+    console.error(`${LOG_PREFIX} setContactAttribute(${attrName}) error:`, error.message);
+    return false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  START CHATBOT
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function startChatbot(waId, chatbotId) {
+  if (!waId) throw new ValidationError('Phone number (waId) is required');
+  if (!chatbotId) throw new ValidationError('Chatbot ID is required');
+
+  const cleanPhone = normalizePhone(waId);
+  const endpoint = `/api/v2/startChatbot/${chatbotId}?whatsappNumber=${cleanPhone}`;
+
+  try {
+    const response = await watiRequest('post', endpoint);
+    console.log(`${LOG_PREFIX} Started chatbot ${chatbotId} for ${cleanPhone}`);
+    return response.status === 200;
+  } catch (error) {
+    console.error(`${LOG_PREFIX} startChatbot(${chatbotId}) error:`, error.message);
+    return false;
+  }
 }
 
 async function setRegistrationApprovalAttribute(waId, approvalType) {
@@ -147,6 +193,8 @@ async function getContactDetails(phoneNumber) {
 module.exports = {
   sendSessionMessage,
   setWaidAttribute,
+  setContactAttribute,
+  startChatbot,
   setRegistrationApprovalAttribute,
   sendRegistrationConfirmation,
   getContactDetails

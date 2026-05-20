@@ -19,6 +19,10 @@ const config = require('../config');
 // Shared write abstraction (was defined locally, now shared with formHandler)
 const { buildWriteBoth, tryWriteOrQueue } = require('../lib/writeBoth');
 
+const ONBOARDING_CHATBOTS = [
+  '6a0d8be4ad26a69870ac7847',
+  '69691e0302430341c43f1352',
+];
 
 // ═════════════════════════════════════════════════════════════
 //  HANDLE NEW CONTACT (WATI: newContactMessageReceived)
@@ -53,6 +57,9 @@ async function handleNewContact(params) {
     try { await WatiService.setWaidAttribute(params); }
     catch (e) { console.error(`[WATI] setWaidAttribute: ${e.message}`); }
 
+    // Side-effect: WATI onboarding (non-transactional, fire-and-forget)
+    triggerWatiOnboarding(phone);
+
     return { status: 'success', message: 'New contact processed' };
 
   } catch (error) {
@@ -84,6 +91,9 @@ async function handleInterestedUser(params) {
     phone, handler: 'handleInterestedUser'
   });
 
+  // Side-effect: WATI onboarding (non-transactional, fire-and-forget)
+  triggerWatiOnboarding(phone);
+
   return { status: 'success' };
 }
 
@@ -111,6 +121,9 @@ async function handleAdvertisementContact(params) {
     phone, handler: 'handleAdvertisementContact'
   });
 
+  // Side-effect: WATI onboarding (non-transactional, fire-and-forget)
+  triggerWatiOnboarding(phone);
+
   return { status: 'success' };
 }
 
@@ -136,6 +149,9 @@ async function handleWebForm(params) {
     await tryWriteOrQueue(writeFn, `webform_${phone}_${Date.now()}`, {
       phone, handler: 'handleWebForm'
     });
+
+    // Side-effect: WATI onboarding (non-transactional, fire-and-forget)
+    triggerWatiOnboarding(phone);
 
     return { status: 'success' };
 
@@ -168,6 +184,9 @@ async function handleKeywordContact(params) {
   await tryWriteOrQueue(writeFn, `keyword_${phone}_${Date.now()}`, {
     phone, handler: 'handleKeywordContact'
   });
+
+  // Side-effect: WATI onboarding (non-transactional, fire-and-forget)
+  triggerWatiOnboarding(phone);
 
   return { status: 'success' };
 }
@@ -352,6 +371,18 @@ async function handleUserLogin(params) {
   } catch (error) {
     if (error instanceof ValidationError) throw error;
     throw new ExternalServiceError(error.message, 'Attendance', { handler: 'handleUserLogin' });
+  }
+}
+
+function triggerWatiOnboarding(phone) {
+  const waId = phone; // already validated/cleaned by caller
+
+  WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
+    .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
+
+  for (const botId of ONBOARDING_CHATBOTS) {
+    WatiService.startChatbot(waId, botId)
+      .catch(e => console.error(`[WATI] startChatbot(${botId}): ${e.message}`));
   }
 }
 
