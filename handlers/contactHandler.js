@@ -385,10 +385,10 @@ function triggerWatiOnboarding(phone) {
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
     .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
 
-  for (const botId of ONBOARDING_CHATBOTS) {
-    WatiService.startChatbot(waId, botId)
-      .catch(e => console.error(`[WATI] startChatbot(${botId}): ${e.message}`));
-  }
+  WatiService.startChatbot(waId, '6a0d8be4ad26a69870ac7847')
+    .then(() => new Promise(resolve => setTimeout(resolve, 2000)))
+    .then(() => WatiService.startChatbot(waId, '69691e0302430341c43f1352'))
+    .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
 }
 
 
