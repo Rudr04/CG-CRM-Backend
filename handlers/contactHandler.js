@@ -357,7 +357,7 @@ async function handleRegistrationCheck(params) {
 //  HANDLE USER LOGIN (unchanged — different sheet, attendance only)
 // ═════════════════════════════════════════════════════════════
 async function handleUserLogin(params) {
-  try {
+  try {triggerWatiOnboarding 
     console.log('User login event received from CosmoGuru Live');
     const phone = params.data?.phone || '';
     const name  = params.data?.name || '';

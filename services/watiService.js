@@ -87,19 +87,21 @@ async function setWaidAttribute(params) {
 //  GENERIC CONTACT ATTRIBUTE
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function setContactAttribute(waId, attrName, attrValue) {
+async function setContactAttribute(waId, attrNameOrArray, attrValue) {
   if (!waId) throw new ValidationError('Phone number (waId) is required');
 
   const endpoint = `/api/v1/updateContactAttributes/${waId}`;
 
+  const customParams = Array.isArray(attrNameOrArray)
+    ? attrNameOrArray
+    : [{ name: attrNameOrArray, value: attrValue }];
+
   try {
-    await watiRequest('post', endpoint, {
-      customParams: [{ name: attrName, value: attrValue }]
-    });
-    console.log(`${LOG_PREFIX} Set ${attrName}=${attrValue} for ${waId}`);
+    await watiRequest('post', endpoint, { customParams });
+    console.log(`${LOG_PREFIX} Set attributes for ${waId}: ${customParams.map(p => p.name).join(', ')}`);
     return true;
   } catch (error) {
-    console.error(`${LOG_PREFIX} setContactAttribute(${attrName}) error:`, error.message);
+    console.error(`${LOG_PREFIX} setContactAttribute error:`, error.message);
     return false;
   }
 }
@@ -125,19 +127,6 @@ async function startChatbot(waId, chatbotId) {
   }
 }
 
-async function setRegistrationApprovalAttribute(waId, approvalType) {
-  const endpoint = `/api/v1/updateContactAttributes/${waId}`;
-  try {
-    await watiRequest('post', endpoint, {
-      customParams: [{ name: 'mc_approve', value: approvalType }]
-    });
-    return true;
-  } catch (error) {
-    console.error(`${LOG_PREFIX} setRegistrationApprovalAttribute error:`, error.message);
-    return false;
-  }
-}
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TEMPLATE MESSAGES
@@ -159,9 +148,13 @@ async function sendRegistrationConfirmation(params) {
   const message = isEvening
     ? `🙏 शुभम! ${name}Ji\n\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है*\n\n📅 Sunday, 7th June | ⏰ शाम 4:30 बजे\n\n*🆔 रजिस्ट्रेशन नंबर: ${waId}*\nआप इस नंबर द्वारा मास्टरक्लास जॉइन कर सकेंगे\n\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${link}`
     : `🙏 શુભમ! ${name}Ji\n\n✅ આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.\n\n📅 Sunday, 7th June | ⏰ સવારે 10:00 વાગ્યે\n\n🆔 રેજીસ્ટ્રેશન નંબર: ${waId}\nઆપ આ નંબર દ્વારા માસ્ટરક્લાસ જોઈન કરી શકશો.\n\n🔗 લિંક અને વધુ માહિતી માટે WhatsApp ગ્રુપ જોઈન કરો:\n${link}`;
+  
+  await setContactAttribute(waId, [
+      { name: 'mc_approve', value: choice },
+      { name: 'mc_form_filled', value: 'TRUE' },
+    ]);
 
   await sendSessionMessage(waId, message);
-  await setRegistrationApprovalAttribute(waId, choice);
   console.log(`${LOG_PREFIX} Registration confirmation sent to ${waId} (${choice})`);
   return true;
 }
