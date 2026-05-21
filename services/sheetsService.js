@@ -649,15 +649,16 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     if (fsKey === 'createdAt' && value) {
       try {
         const d = new Date(value);
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const year = d.getFullYear();
+        const parts = new Intl.DateTimeFormat('en-IN', {
+          timeZone: config.TIMEZONE,
+          year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(d);
+        const month = parts.find(p => p.type === 'month').value;
+        const day   = parts.find(p => p.type === 'day').value;
+        const year  = parts.find(p => p.type === 'year').value;
         value = `${month}/${day}/${year}`;
-      } catch (e) {
-        // Keep original value if parsing fails
-      }
+      } catch (e) { /* keep original */ }
     }
-
     set(fieldKey, value);
   }
 
