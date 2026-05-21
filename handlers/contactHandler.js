@@ -442,8 +442,7 @@ async function handleReactivation(params) {
 }
 
 async function triggerWatiOnboarding(phone) {
-  if (!TEST_PHONES.has(phone)) return;
-
+  
   const existing = await FirestoreService.findLeadByPhone(phone);
   if (existing?.data) {
     const status = existing.data.status || '';
