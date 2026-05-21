@@ -12,6 +12,7 @@ const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
 const PendingQueue     = require('../services/pendingQueue');
+const SheetService = require('../services/sheetsService');
 const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
@@ -419,6 +420,12 @@ async function handleScheduledFollowup(params) {
     details: { template: config.WATI.TEMPLATES.COURSE_DETAILS }
   });
 
+  TaskService.scheduleWebhookTask(
+    `inactive-${phone}-${Date.now()}`,
+    { eventType: 'scheduled_inactive_check', phone },
+    600  // 24hrs after 3rd message (use 600 for testing)
+  ).catch(e => console.error(`[Tasks] schedule inactive check: ${e.message}`));
+
   console.log(`[FollowUp] Template sent to ${phone}`);
   return { status: 'success', message: 'followup_sent' };
 }
@@ -469,6 +476,66 @@ async function triggerWatiOnboarding(phone) {
   ).catch(e => console.error(`[Tasks] schedule followup: ${e.message}`));
 }
 
+// ═════════════════════════════════════════════════════════════
+//  HANDLE INACTIVE CHECK (48hrs after 3rd message)
+// ═════════════════════════════════════════════════════════════
+async function handleInactiveCheck(params) {
+  const phone = params.phone;
+  if (!phone) throw new ValidationError('Phone missing in scheduled task');
+
+  console.log(`[InactiveCheck] Processing for ${phone}`);
+
+  const result = await FirestoreService.findLeadByPhone(phone);
+  const lead = result?.data;
+
+  if (!lead) {
+    console.log(`[InactiveCheck] Lead ${phone} not found — skipping`);
+    return { status: 'skipped', reason: 'lead_not_found' };
+  }
+
+  const attr = lead.attributes || {};
+
+  // Skip if they engaged after 3rd message
+  if (attr.mc_form_filled === true || attr.callback_requested === true) {
+    console.log(`[InactiveCheck] ${phone} engaged — skipping`);
+    return { status: 'skipped', reason: 'lead_engaged' };
+  }
+
+  // Skip if already converted
+  const status = lead.status || '';
+  if (config.CONVERTED_STATUSES.includes(status) || config.SEMI_CONVERTED_STATUSES.includes(status)) {
+    console.log(`[InactiveCheck] ${phone} converted — skipping`);
+    return { status: 'skipped', reason: 'already_converted' };
+  }
+
+  // Mark inactive in Firestore
+  await FirestoreService.updateLead(phone, {
+    status: 'Inactive',
+    agent: config.DEFAULTS.ROBO_AGENT,
+  }, {
+    action: 'marked_inactive', by: 'scheduler',
+    details: { reason: 'no_response_48hrs' }
+  });
+
+  // Mark inactive in Sheet
+  try {
+    const existing = await SheetService.findByPhone(phone);
+    if (existing) {
+      const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+      const M = colMap.map;
+      await SheetService.updateContactCells(existing.row, {
+        [M.status]: 'Inactive',
+        [M.team]: config.DEFAULTS.ROBO_AGENT,
+      });
+    }
+  } catch (e) {
+    console.error(`[InactiveCheck] Sheet update failed for ${phone}: ${e.message}`);
+  }
+
+  console.log(`[InactiveCheck] ${phone} marked Inactive + ROBO`);
+  return { status: 'success', message: 'marked_inactive' };
+}
+
 
 module.exports = {
   handleNewContact,
@@ -481,5 +548,6 @@ module.exports = {
   handleRegistrationCheck,
   handleUserLogin,
   handleScheduledFollowup,
-  handleReactivation
+  handleReactivation,
+  handleInactiveCheck,
 };
