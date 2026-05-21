@@ -97,13 +97,21 @@ function truncate(str, maxLength = 100) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Format date as MM/DD/YYYY
+ * Format date as MM/DD/YYYY in IST
  */
 function formatDate(date) {
   const d = date instanceof Date ? date : new Date(date);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const year = d.getFullYear();
+  // Use Intl to get IST date parts — same approach as formatTimeIST
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: config.TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(d);
+
+  const month = parts.find(p => p.type === 'month').value;
+  const day   = parts.find(p => p.type === 'day').value;
+  const year  = parts.find(p => p.type === 'year').value;
   return `${month}/${day}/${year}`;
 }
 
