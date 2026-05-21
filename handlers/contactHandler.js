@@ -387,7 +387,8 @@ async function handleScheduledFollowup(params) {
 
   console.log(`[FollowUp] Processing for ${phone}`);
 
-  const lead = await FirestoreService.getLead(phone);
+  const result = await FirestoreService.findLeadByPhone(phone);
+  const lead = result?.data;
 
   if (!lead) {
     console.log(`[FollowUp] Lead ${phone} not found — skipping`);
