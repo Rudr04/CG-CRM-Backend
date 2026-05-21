@@ -241,7 +241,7 @@ module.exports = {
     LOCATION: 'asia-south1',
     QUEUE: 'lead-followup',
     WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
-    FOLLOWUP_DELAY_SEC: 300,
+    FOLLOWUP_DELAY_SEC: 240,
   },
 
   // ─── WATI (WhatsApp) ──────────────────────────────────────────────────────

@@ -210,5 +210,6 @@ module.exports = {
   setContactAttribute,
   startChatbot,
   sendRegistrationConfirmation,
-  getContactDetails
+  getContactDetails,
+  sendTemplateMessage
 };
