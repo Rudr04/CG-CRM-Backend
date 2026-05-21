@@ -47,7 +47,7 @@ const WHATSAPP = {
   TEMPLATES: {
     MORNING_CONFIRMATION: 'cgi_22_test3',      // TODO: update template name
     EVENING_CONFIRMATION: 'cgi_22_test3_2',    // TODO: update template name
-    COURSE_DETAILS: 'cgi_course_info_draft3',    
+    COURSE_DETAILS: 'cgi_course_info_draft4',    
   },
   REDIRECT_BASE: 'https://log-redirect-click.rudr0401.workers.dev',
   BROADCAST_NAME: 'Registration_Confirmation',
