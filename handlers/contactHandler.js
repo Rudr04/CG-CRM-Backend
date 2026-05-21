@@ -422,7 +422,7 @@ async function handleScheduledFollowup(params) {
   TaskService.scheduleWebhookTask(
     `inactive-${phone}-${Date.now()}`,
     { eventType: 'scheduled_inactive_check', phone },
-    600  // 24hrs after 3rd message (use 600 for testing)
+    86400  // 24hrs after 3rd message (use 600 for testing)
   ).catch(e => console.error(`[Tasks] schedule inactive check: ${e.message}`));
 
   console.log(`[FollowUp] Template sent to ${phone}`);
@@ -442,7 +442,7 @@ async function handleReactivation(params) {
 }
 
 async function triggerWatiOnboarding(phone) {
-  
+
   const existing = await FirestoreService.findLeadByPhone(phone);
   if (existing?.data) {
     const status = existing.data.status || '';
