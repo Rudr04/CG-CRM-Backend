@@ -168,8 +168,8 @@ async function sendRegistrationConfirmation(params) {
     : `https://join-wa.cosmoguru.com/m/${waId}`;
 
   const message = isEvening
-    ? `🙏 शुभम! ${name}Ji\n\n*Free Demo Class के लिए नीचे दी गई लिंक पर क्लिक करके WhatsApp ग्रुप जॉइन करें 👇*\n${link}\n\n🆔 आपका रजिस्टर्ड नंबर: ${waId}`
-    : `🙏 શુભમ! ${name}Ji\n\n*Free Demo Class માટે નીચે આપેલ લિંક પર ક્લિક કરીને WhatsApp ગ્રુપ જોડાઓ.👇*\n${link}\n\n🆔 આપનો રજિસ્ટર્ડ નંબર: ${waId}`;
+    ? `🙏 शुभम! ${name}Ji\n\n*Free Demo Class के लिए नीचे दी गई लिंक पर क्लिक करके WhatsApp ग्रुप जॉइन करें 👇*\n${link}`
+    : `🙏 શુભમ! ${name}Ji\n\n*Free Demo Class માટે નીચે આપેલ લિંક પર ક્લિક કરીને WhatsApp ગ્રુપ જોડાઓ.👇*\n${link}`;
   
   await setContactAttribute(waId, [
       { name: 'mc_approve', value: choice },
