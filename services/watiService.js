@@ -168,8 +168,8 @@ async function sendRegistrationConfirmation(params) {
     : `https://join-wa.cosmoguru.com/m/${waId}`;
 
   const message = isEvening
-    ? `🙏 शुभम! ${name}Ji\n\n*✅ आपका CVPT मास्टरक्लास के लिए रजिस्ट्रेशन सफल हो गया है*\n\n📅 Sunday, 7th June | ⏰ शाम 4:30 बजे\n\n*🆔 रजिस्ट्रेशन नंबर: ${waId}*\nआप इस नंबर द्वारा मास्टरक्लास जॉइन कर सकेंगे\n\n🔗 लिंक और अधिक जानकारी के लिए WhatsApp ग्रुप जॉइन करें:\n${link}`
-    : `🙏 શુભમ! ${name}Ji\n\n✅ આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.\n\n📅 Sunday, 7th June | ⏰ સવારે 10:00 વાગ્યે\n\n🆔 રેજીસ્ટ્રેશન નંબર: ${waId}\nઆપ આ નંબર દ્વારા માસ્ટરક્લાસ જોઈન કરી શકશો.\n\n🔗 લિંક અને વધુ માહિતી માટે WhatsApp ગ્રુપ જોઈન કરો:\n${link}`;
+    ? `🙏 शुभम! ${name}Ji\n\n*Free Demo Class માટે નીચે આપેલ લિંક પર ક્લિક કરીને WhatsApp ગ્રુપ જોડાઓ.👇*\n${link}\n\n🆔 आपका रजिस्टर्ड नंबर: ${waId}`
+    : `🙏 શુભમ! ${name}Ji\n\n*આપનું CVPT માસ્ટરક્લાસ માટે રજીસ્ટ્રેશન સફળ થયું છે.👇*\n${link}\n\n🆔 આપનો રજિસ્ટર્ડ નંબર: ${waId}`;
   
   await setContactAttribute(waId, [
       { name: 'mc_approve', value: choice },
