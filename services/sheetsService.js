@@ -501,6 +501,44 @@ async function addComment(row, colIdx, commentText, spreadsheetId) {
 }
 
 // ═════════════════════════════════════════════════════════════
+//  ADD NOTE TO CELL
+// ═════════════════════════════════════════════════════════════
+async function addCellNote(row, colIdx, noteText, spreadsheetId, tabName) {
+  spreadsheetId = spreadsheetId || config.SPREADSHEET_ID;
+  tabName = tabName || config.SHEETS.DSR;
+
+  const api = await getSheets();
+
+  const meta = await api.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties'
+  });
+  const sheet = meta.data.sheets.find(s => s.properties.title === tabName);
+  if (!sheet) throw new Error(`addCellNote: tab '${tabName}' not found`);
+
+  await api.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{
+        updateCells: {
+          rows: [{ values: [{ note: noteText }] }],
+          fields: 'note',
+          range: {
+            sheetId: sheet.properties.sheetId,
+            startRowIndex: row - 1,
+            endRowIndex: row,
+            startColumnIndex: colIdx,
+            endColumnIndex: colIdx + 1,
+          }
+        }
+      }]
+    }
+  });
+
+  console.log(`[Sheet] Note added on ${tabName} row ${row} col ${colIdx}`);
+}
+
+// ═════════════════════════════════════════════════════════════
 //  INSERT ROW TO SHEET — Write lead data to any target sheet
 //
 //  Uses dynamic column mapping: reads row 1 headers of the
@@ -690,5 +728,6 @@ module.exports = {
   updateAttendance,
   insertRowToSheet,
   deleteRowFromSheet,
+  addCellNote,
   addComment
 };

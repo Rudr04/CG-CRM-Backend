@@ -101,6 +101,7 @@ async function handleCallbackFormReply(customParams, phoneNumber) {
   const updates = {
     'attributes.callback_requested': true,
     status: 'Help',
+    agent: config.DEFAULTS.TEAM,
   };
   if (name) updates.name = name;
 
@@ -113,24 +114,30 @@ async function handleCallbackFormReply(customParams, phoneNumber) {
   const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
   const M = colMap.map;
   const existing = await SheetService.findByPhone(phoneNumber);
-  
   if (existing) {
+    const cgid = existing.data.cgid || '';
 
     const cellUpdates = {
       [M.status]: 'Help',
       [M.team]: config.DEFAULTS.TEAM,
       [M.name]: name || existing.data.name || '',
+      [M.cbReq]: timeSlot ||  '',
     };
-
     await SheetService.updateContactCells(existing.row, cellUpdates);
-    
-    // Threaded comment on status cell
+
+    // Threaded comment in sidebar — number + CGID
     await SheetService.addComment(
       existing.row,
       M.status,
-      `Callback requested\nName: ${name}\nTime: ${timeSlot}`
+      `Callback requested\nPhone: ${phoneNumber}\nCGID: ${cgid}\nTime: ${timeSlot}`
     );
   }
+
+  // Send confirmation session message
+  await WatiService.sendSessionMessage(
+    phoneNumber,
+    `Thank You for your response\nCosmo Counselor will *Call you shortly*\nwithin requested *Time Slot ${timeSlot}*`
+  );
 
   return { status: 'callback_form_success', timeSlot };
 }

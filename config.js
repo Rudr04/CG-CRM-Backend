@@ -145,6 +145,7 @@ const FIELD_HEADERS = {
   // Ad attribution (looked up from WATI sourceId via AD_SOURCE_MAPPING)
   adCampaign:        'Ad Campaign',
   adSet:             'Ad Set',
+  cbReq:             'CB Req',
 };
 
 
