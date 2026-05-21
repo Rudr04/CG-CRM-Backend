@@ -162,7 +162,13 @@ const AD_SOURCE_MAPPING = {
   '6968831058161': { adSet: 'Mumbai ads',       adCampaign: 'CGI_May_2026_MMO' },
   '6968826782161': { adSet: 'Punjab-all ads',   adCampaign: 'CGI_May_2026_MMO' },
   '6968822565961': { adSet: 'Gujarat-all ads',  adCampaign: 'CGI_May_2026_MMO' },
+  '6975877951161': { adSet: 'Ahmedabad Only',   adCampaign: 'CGI_May_2026_MMO' },
+  '6977005640361': { adSet: 'Delhi',            adCampaign: 'CGI_May_2026_MMO' },
+  '6981164101961': { adSet: 'Delhi',            adCampaign: 'CGI24 MB INDIA' },
+  '6981163415961': { adSet: 'Mumbai',           adCampaign: 'CGI24 MB INDIA' },
+  '6981077443161': { adSet: 'Ahmedabad',        adCampaign: 'CGI24 MB INDIA' },
   '6641334265161': { adSet: 'CGI Gujarat ads',  adCampaign: 'CGI Admissions_May_2026' },
+
 };
 
 function getAdMapping(sourceId) {
