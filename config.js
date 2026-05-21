@@ -47,9 +47,18 @@ const WHATSAPP = {
   TEMPLATES: {
     MORNING_CONFIRMATION: 'cgi_22_test3',      // TODO: update template name
     EVENING_CONFIRMATION: 'cgi_22_test3_2',    // TODO: update template name
+    COURSE_DETAILS: 'cgi_course_info_draft3',    
   },
   REDIRECT_BASE: 'https://log-redirect-click.rudr0401.workers.dev',
   BROADCAST_NAME: 'Registration_Confirmation',
+};
+
+const CLOUD_TASKS = {
+  PROJECT_ID: process.env.GCP_PROJECT_ID || 'cg-unified-platform',
+  LOCATION: 'asia-south1',
+  QUEUE: 'lead-followup',
+  WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
+  FOLLOWUP_DELAY_SEC: parseInt(process.env.FOLLOWUP_DELAY_SEC || '300', 10),
 };
 
 
@@ -300,6 +309,7 @@ module.exports = {
     STAGE_TRANSITION: 'stage_transition',
     USER_LOGIN: 'user_login',
     MESSAGE: 'message',
+    SCHEDULED_FOLLOWUP: 'scheduled_followup',
   },
 
   // ─── List Reply IDs ───────────────────────────────────────────────────────

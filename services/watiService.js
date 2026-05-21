@@ -132,6 +132,28 @@ async function startChatbot(waId, chatbotId) {
 //  TEMPLATE MESSAGES
 // ═══════════════════════════════════════════════════════════════════════════
 
+async function sendTemplateMessage(phoneOrPhones, templateName, customParams = [], broadcastName = 'crm_auto') {
+  const phones = Array.isArray(phoneOrPhones) ? phoneOrPhones : [phoneOrPhones];
+
+  const receivers = phones.map(p => ({
+    whatsappNumber: normalizePhone(p),
+    localMessageId: '',
+    customParams,
+  }));
+
+  const endpoint = '/api/v1/sendTemplateMessages';
+
+  const response = await watiRequest('post', endpoint, {
+    template_name: templateName,
+    broadcast_name: broadcastName,
+    receivers,
+    channel_number: '',
+  });
+
+  console.log(`${LOG_PREFIX} Template '${templateName}' sent to ${receivers.length} receiver(s)`);
+  return response.status === 200;
+}
+
 async function sendRegistrationConfirmation(params) {
   const waId = params.wa_num || '';
   const name = params.name || '';

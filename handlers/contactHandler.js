@@ -15,8 +15,7 @@ const PendingQueue     = require('../services/pendingQueue');
 const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
-
-// Shared write abstraction (was defined locally, now shared with formHandler)
+const TaskService = require('../services/taskService');
 const { buildWriteBoth, tryWriteOrQueue } = require('../lib/writeBoth');
 
 const ONBOARDING_CHATBOTS = [
@@ -379,17 +378,66 @@ async function handleUserLogin(params) {
   }
 }
 
+// ═════════════════════════════════════════════════════════════
+//  HANDLE SCHEDULED FOLLOW-UP (from Cloud Tasks)
+// ═════════════════════════════════════════════════════════════
+async function handleScheduledFollowup(params) {
+  const phone = params.phone;
+  if (!phone) throw new ValidationError('Phone missing in scheduled task');
+
+  console.log(`[FollowUp] Processing for ${phone}`);
+
+  const lead = await FirestoreService.getLead(phone);
+
+  if (!lead) {
+    console.log(`[FollowUp] Lead ${phone} not found — skipping`);
+    return { status: 'skipped', reason: 'lead_not_found' };
+  }
+
+  if (lead.mc_form_filled === true) {
+    console.log(`[FollowUp] ${phone} filled form — skipping`);
+    return { status: 'skipped', reason: 'form_filled' };
+  }
+
+  if (lead.callback_requested === true) {
+    console.log(`[FollowUp] ${phone} requested callback — skipping`);
+    return { status: 'skipped', reason: 'callback_requested' };
+  }
+
+  if (lead.third_msg_sent === true) {
+    console.log(`[FollowUp] ${phone} already received 3rd message — skipping`);
+    return { status: 'skipped', reason: 'already_sent' };
+  }
+
+  await WatiService.sendTemplateMessage(phone, config.WATI.TEMPLATES.COURSE_DETAILS);
+
+  await FirestoreService.updateLead(phone, { third_msg_sent: true }, {
+    action: 'followup_sent', by: 'scheduler',
+    details: { template: config.WATI.TEMPLATES.COURSE_DETAILS }
+  });
+
+  console.log(`[FollowUp] Template sent to ${phone}`);
+  return { status: 'success', message: 'followup_sent' };
+}
+
 function triggerWatiOnboarding(phone) {
-  if (!TEST_PHONES.has(phone)) return; // skip everyone else during testing  
-  const waId = phone; // already validated/cleaned by caller
+  if (!TEST_PHONES.has(phone)) return;
+
+  const waId = phone;
 
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
     .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
 
   WatiService.startChatbot(waId, '6a0d8be4ad26a69870ac7847')
-    .then(() => new Promise(resolve => setTimeout(resolve, 2000)))
     .then(() => WatiService.startChatbot(waId, '69691e0302430341c43f1352'))
     .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
+
+  // Schedule 3rd message follow-up
+  TaskService.scheduleWebhookTask(
+    `followup-${phone}-${Date.now()}`,
+    { eventType: config.EVENT_TYPES.SCHEDULED_FOLLOWUP, phone },
+    config.CLOUD_TASKS.FOLLOWUP_DELAY_SEC
+  ).catch(e => console.error(`[Tasks] schedule followup: ${e.message}`));
 }
 
 
@@ -403,4 +451,5 @@ module.exports = {
   handleCommunityJoin,
   handleRegistrationCheck,
   handleUserLogin,
+  handleScheduledFollowup
 };
