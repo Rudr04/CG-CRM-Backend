@@ -420,7 +420,7 @@ async function handleScheduledFollowup(params) {
   });
 
   TaskService.scheduleWebhookTask(
-    `inactive-${phone}-${Date.now()}`,
+    `inactive-${phone}`,
     { eventType: 'scheduled_inactive_check', phone },
     86400  // 24hrs after 3rd message (use 600 for testing)
   ).catch(e => console.error(`[Tasks] schedule inactive check: ${e.message}`));
@@ -468,7 +468,7 @@ async function triggerWatiOnboarding(phone) {
     .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
 
   TaskService.scheduleWebhookTask(
-    `followup-${phone}-${Date.now()}`,
+    `followup-${phone}`,
     { eventType: config.EVENT_TYPES.SCHEDULED_FOLLOWUP, phone },
     config.CLOUD_TASKS.FOLLOWUP_DELAY_SEC
   ).catch(e => console.error(`[Tasks] schedule followup: ${e.message}`));
