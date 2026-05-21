@@ -240,7 +240,7 @@ module.exports = {
   CLOUD_TASKS: {
     PROJECT_ID: process.env.GCP_PROJECT_ID || 'cg-unified-platform',
     LOCATION: 'asia-south1',
-    QUEUE: 'lead-followup',
+    QUEUE: 'leads-folloup',
     WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
     FOLLOWUP_DELAY_SEC: 240,
   },
