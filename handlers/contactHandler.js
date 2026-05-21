@@ -423,12 +423,32 @@ async function handleScheduledFollowup(params) {
   return { status: 'success', message: 'followup_sent' };
 }
 
-function triggerWatiOnboarding(phone) {
+// ═════════════════════════════════════════════════════════════
+//  HANDLE REACTIVATION (manual broadcast CTA: "I Want to Join Demo Class")
+// ═════════════════════════════════════════════════════════════
+async function handleReactivation(params) {
+  const phone = validatePhoneNumber(params.waId, { source: 'handleReactivation' });
+  console.log(`[Reactivation] Triggered for ${phone}`);
+
+  await triggerWatiOnboarding(phone);
+
+  return { status: 'success', message: 'reactivation_triggered' };
+}
+
+async function triggerWatiOnboarding(phone) {
   if (!TEST_PHONES.has(phone)) return;
+
+  const existing = await FirestoreService.findLeadByPhone(phone);
+  if (existing?.data) {
+    const status = existing.data.status || '';
+    if (config.CONVERTED_STATUSES.includes(status) || config.SEMI_CONVERTED_STATUSES.includes(status)) {
+      console.log(`[Onboarding] ${phone} is converted/semi-converted (${status}) — skipping`);
+      return;
+    }
+  }
 
   const waId = phone;
 
-  // Initialize bot flow attributes in Firestore
   FirestoreService.updateLead(phone, {
     'attributes.mc_form_filled': false,
     'attributes.callback_requested': false,
@@ -460,5 +480,6 @@ module.exports = {
   handleCommunityJoin,
   handleRegistrationCheck,
   handleUserLogin,
-  handleScheduledFollowup
+  handleScheduledFollowup,
+  handleReactivation
 };

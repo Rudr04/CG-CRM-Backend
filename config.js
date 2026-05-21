@@ -350,6 +350,7 @@ module.exports = {
   },
 
   CONVERTED_STATUSES: ['Admission Done', 'Seat Booked'],
+  SEMI_CONVERTED_STATUSES: ['Morning MC GrpJoined', 'Evening MC GrpJoined'],
 
   // ─── Defaults ─────────────────────────────────────────────────────────────
   DEFAULTS: {
