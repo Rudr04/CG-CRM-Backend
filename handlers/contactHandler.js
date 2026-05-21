@@ -395,24 +395,26 @@ async function handleScheduledFollowup(params) {
     return { status: 'skipped', reason: 'lead_not_found' };
   }
 
-  if (lead.mc_form_filled === true) {
+  const attr = lead.attributes || {};
+
+  if (attr.mc_form_filled === true) {
     console.log(`[FollowUp] ${phone} filled form — skipping`);
     return { status: 'skipped', reason: 'form_filled' };
   }
 
-  if (lead.callback_requested === true) {
+  if (attr.callback_requested === true) {
     console.log(`[FollowUp] ${phone} requested callback — skipping`);
     return { status: 'skipped', reason: 'callback_requested' };
   }
 
-  if (lead.third_msg_sent === true) {
+  if (attr.followUp_sent === true) {
     console.log(`[FollowUp] ${phone} already received 3rd message — skipping`);
     return { status: 'skipped', reason: 'already_sent' };
   }
 
   await WatiService.sendTemplateMessage(phone, config.WATI.TEMPLATES.COURSE_DETAILS);
 
-  await FirestoreService.updateLead(phone, { third_msg_sent: true }, {
+  await FirestoreService.updateLead(phone, { 'attributes.followUp_sent': true }, {
     action: 'followup_sent', by: 'scheduler',
     details: { template: config.WATI.TEMPLATES.COURSE_DETAILS }
   });
@@ -426,6 +428,13 @@ function triggerWatiOnboarding(phone) {
 
   const waId = phone;
 
+  // Initialize bot flow attributes in Firestore
+  FirestoreService.updateLead(phone, {
+    'attributes.mc_form_filled': false,
+    'attributes.callback_requested': false,
+    'attributes.followUp_sent': false,
+  }).catch(e => console.error(`[Firestore] init attributes: ${e.message}`));
+
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
     .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
 
@@ -433,7 +442,6 @@ function triggerWatiOnboarding(phone) {
     .then(() => WatiService.startChatbot(waId, '69691e0302430341c43f1352'))
     .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
 
-  // Schedule 3rd message follow-up
   TaskService.scheduleWebhookTask(
     `followup-${phone}-${Date.now()}`,
     { eventType: config.EVENT_TYPES.SCHEDULED_FOLLOWUP, phone },

@@ -256,6 +256,11 @@ module.exports = {
       OPTION: 'mc_regi_24_screen_0_radiobuttonsgroup_0',
       // PHONE field removed — form no longer collects phone, waId is used directly
     },
+    CALLBACK_FORM_PARAMS: {
+      CONTENT:   'callback_req_content',
+      NAME:      'callback_req_screen_0_textinput_0',
+      TIME_SLOT: 'callback_req_screen_0_radiobuttonsgroup_0',
+    },
   },
 
   // ─── Firebase RTDB (Whitelist only) ───────────────────────────────────────

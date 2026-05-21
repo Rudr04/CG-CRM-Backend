@@ -74,11 +74,52 @@ async function handleFormSubmission(params) {
     phone, handler: 'handleFormSubmission'
   });
 
+  // Set mc_form_filled attribute
+  FirestoreService.updateLead(phone, { 'attributes.mc_form_filled': true }, {
+    action: 'mc_form_filled', by: 'system', details: { option: params.option }
+  }).catch(e => console.error(`[Firestore] mc_form_filled: ${e.message}`));
+
   // WATI confirmation (only true side-effect — fire-and-forget)
   WatiService.sendRegistrationConfirmation(params)
     .catch(e => console.error(`[WATI] confirmation: ${e.message}`));
 
   return { status: 'form_update_success' };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  HANDLE CALLBACK FORM REPLY
+// ═════════════════════════════════════════════════════════════
+async function handleCallbackFormReply(customParams, phoneNumber) {
+  const nameParam = customParams.find(p => p.name === config.WATI.CALLBACK_FORM_PARAMS.NAME);
+  const timeParam = customParams.find(p => p.name === config.WATI.CALLBACK_FORM_PARAMS.TIME_SLOT);
+
+  const name = nameParam?.value || '';
+  const timeSlot = timeParam?.value || '';
+
+  console.log(`Callback form: name=${name}, timeSlot=${timeSlot}, phone=${phoneNumber}`);
+
+  const updates = {
+    'attributes.callback_requested': true,
+    status: 'Help',
+  };
+  if (name) updates.name = name;
+
+  await FirestoreService.updateLead(phoneNumber, updates, {
+    action: 'callback_requested', by: 'system',
+    details: { name, timeSlot }
+  });
+
+  // Update sheet
+  const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
+  const M = colMap.map;
+  const existing = await SheetService.findByPhone(phoneNumber);
+  if (existing) {
+    const cellUpdates = { [M.status]: 'Help' };
+    if (name) cellUpdates[M.name] = name;
+    await SheetService.updateContactCells(existing.row, cellUpdates);
+  }
+
+  return { status: 'callback_form_success', timeSlot };
 }
 
 
@@ -91,11 +132,29 @@ async function handleFlowReply(params) {
     const contactData = await WatiService.getContactDetails(phoneNumber);
     if (!contactData?.contact) throw new Error('Failed to get contact details');
 
-    const formData = _extractFormDataFromContact(contactData.contact, phoneNumber);
-    if (!formData) throw new Error('Required form data not found');
+    const customParams = contactData.contact.customParams || [];
 
-    console.log(`Extracted: ${JSON.stringify(formData)}`);
-    return await handleFormSubmission(formData);
+    // Check which form was filled by param presence
+    const hasMcForm = customParams.some(
+      p => p.name === config.WATI.FORM_PARAMS.NAME && p.value
+    );
+    const hasCallbackForm = customParams.some(
+      p => p.name === config.WATI.CALLBACK_FORM_PARAMS.NAME && p.value
+    );
+
+    if (hasCallbackForm) {
+      console.log('Callback form detected');
+      return await handleCallbackFormReply(customParams, phoneNumber);
+    }
+
+    if (hasMcForm) {
+      console.log('MC registration form detected');
+      const formData = _extractFormDataFromContact(contactData.contact, phoneNumber);
+      if (!formData) throw new Error('Required form data not found');
+      return await handleFormSubmission(formData);
+    }
+
+    throw new Error('Unknown flow reply — no matching form params');
   } catch (error) {
     console.error(`Flow reply error: ${error.message}`);
     throw error;
@@ -120,5 +179,6 @@ function _extractFormDataFromContact(contact, phoneNumber) {
 
 module.exports = {
   handleFormSubmission,
-  handleFlowReply
+  handleFlowReply,
+  handleCallbackFormReply
 };
