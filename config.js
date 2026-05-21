@@ -53,15 +53,6 @@ const WHATSAPP = {
   BROADCAST_NAME: 'Registration_Confirmation',
 };
 
-const CLOUD_TASKS = {
-  PROJECT_ID: process.env.GCP_PROJECT_ID || 'cg-unified-platform',
-  LOCATION: 'asia-south1',
-  QUEUE: 'lead-followup',
-  WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
-  FOLLOWUP_DELAY_SEC: '300',
-};
-
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  TIMEZONE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -243,6 +234,14 @@ module.exports = {
     PAID: 'Paid_Users',
     MANUAL_REVIEW: 'Manual_Review',
     FIREBASE_WHITELIST: 'OnlineAttendence'
+  },
+
+  CLOUD_TASKS: {
+    PROJECT_ID: process.env.GCP_PROJECT_ID || 'cg-unified-platform',
+    LOCATION: 'asia-south1',
+    QUEUE: 'lead-followup',
+    WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
+    FOLLOWUP_DELAY_SEC: '300',
   },
 
   // ─── WATI (WhatsApp) ──────────────────────────────────────────────────────
