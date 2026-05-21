@@ -113,10 +113,23 @@ async function handleCallbackFormReply(customParams, phoneNumber) {
   const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
   const M = colMap.map;
   const existing = await SheetService.findByPhone(phoneNumber);
+  
   if (existing) {
-    const cellUpdates = { [M.status]: 'Help' };
-    if (name) cellUpdates[M.name] = name;
+
+    const cellUpdates = {
+      [M.status]: 'Help',
+      [M.team]: config.DEFAULTS.TEAM,
+      [M.name]: name || existing.data.name || '',
+    };
+
     await SheetService.updateContactCells(existing.row, cellUpdates);
+    
+    // Threaded comment on status cell
+    await SheetService.addComment(
+      existing.row,
+      M.status,
+      `Callback requested\nName: ${name}\nTime: ${timeSlot}`
+    );
   }
 
   return { status: 'callback_form_success', timeSlot };

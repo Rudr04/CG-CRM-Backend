@@ -15,12 +15,28 @@ let sheets;
 async function getSheets() {
   if (!sheets) {
     const auth = new google.auth.GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+      ]
     });
     sheets = google.sheets({ version: 'v4', auth });
     console.log('Google Sheets API initialized');
   }
   return sheets;
+}
+
+let drive;
+
+async function getDrive() {
+  if (!drive) {
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive']
+    });
+    drive = google.drive({ version: 'v3', auth });
+    console.log('Google Drive API initialized');
+  }
+  return drive;
 }
 
 
@@ -451,6 +467,38 @@ async function updateAttendance(phoneNumber, name, loginTimestamp) {
   }
 }
 
+// ═════════════════════════════════════════════════════════════
+//  ADD THREADED COMMENT — anchored to a specific cell
+//
+//  Uses Drive API v3 with matrix anchor format.
+//  Row and col are 1-indexed (row 2, col 3 = cell C2).
+//
+//  @param {number} row           - Sheet row (1-based)
+//  @param {number} colIdx        - 0-based column index (converted to 1-based internally)
+//  @param {string} commentText   - Comment content
+//  @param {string} spreadsheetId
+// ═════════════════════════════════════════════════════════════
+async function addComment(row, colIdx, commentText, spreadsheetId) {
+  spreadsheetId = spreadsheetId || config.SPREADSHEET_ID;
+  const driveApi = await getDrive();
+
+  const anchor = JSON.stringify({
+    r: 'head',
+    a: [{ matrix: { r: row, c: colIdx + 1, w: 1, h: 1 } }]
+  });
+
+  const response = await driveApi.comments.create({
+    fileId: spreadsheetId,
+    fields: 'id',
+    requestBody: {
+      content: commentText,
+      anchor,
+    },
+  });
+
+  console.log(`[Sheet] Comment added on row ${row} col ${colIdx + 1}, id: ${response.data.id}`);
+  return response.data.id;
+}
 
 // ═════════════════════════════════════════════════════════════
 //  INSERT ROW TO SHEET — Write lead data to any target sheet
@@ -642,4 +690,5 @@ module.exports = {
   updateAttendance,
   insertRowToSheet,
   deleteRowFromSheet,
+  addComment
 };
