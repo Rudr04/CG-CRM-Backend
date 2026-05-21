@@ -12,7 +12,6 @@ const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
 const PendingQueue     = require('../services/pendingQueue');
-const SheetService = require('../services/sheetsService');
 const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
