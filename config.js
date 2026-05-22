@@ -131,6 +131,8 @@ const FIELD_HEADERS = {
   fulfillmentType:   'Fulfillment Type',
   batchOrSlot:       'Batch / Slot',
   consultant:        'Consultant',
+  formFilled:        'Form Filled',
+  callLog:           'Call Log',
   // Sales review approval + product config (sales_review sheet)
   // NOTE: paymentDate reuses dateOfPayment, txnLast4 reuses paymentRefId,
   // adjustedFee reuses finalPrice — no duplicate keys.

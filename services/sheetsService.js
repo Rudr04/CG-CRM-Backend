@@ -618,6 +618,8 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     fulfillmentStatus: 'fulfillmentStatus',
     fulfillmentDate:   'fulfillmentDate',
     fulfillmentRemark: 'fulfillmentRemark',
+    formFilled:        'formFilled',
+    callLog:           'callLog',
     // Sales review + payment transition fields
     // (paymentDate reuses dateOfPayment above; txnLast4 reuses paymentRefId above;
     //  adjustedFee reuses finalPrice below)

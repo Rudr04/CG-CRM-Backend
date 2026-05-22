@@ -219,6 +219,8 @@ async function createLead(leadData) {
     fulfillmentType: '',
     batchOrSlot: '',
     consultant: '',
+    formFilled: '',
+    callLog: '',
     // Pre-existing schema gap: scholarship/installment were in FIELD_HEADERS
     // and TRACKED_FIELDS but missing from createLead defaults.
     scholarship: 0,

@@ -44,6 +44,7 @@ async function handleFormSubmission(params) {
     try {
       const result = await FirestoreService.createOrUpdateLead({
         phone, name, status: statusValue, inquiry: config.DEFAULTS.INQUIRY,
+        formFilled: `Form submitted: ${option}`,
       }, {
         action: 'form_submitted', by: 'system',
         details: { option, statusValue }
@@ -58,14 +59,18 @@ async function handleFormSubmission(params) {
   const customSheetWrite = async () => {
     const upsertResult = await SheetService.upsertContact({
       phone, name, cgId, source: 'WhatsApp',
-      remark: `Form submitted: ${option}`, inquiry: config.DEFAULTS.INQUIRY,
+      inquiry: config.DEFAULTS.INQUIRY,
     });
     const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
     const M = colMap.map;
-    await SheetService.updateContactCells(upsertResult.row, {
-      [M.name]:    name,
-      [M.status]:  statusValue,
-    });
+    const cellUpdates = {
+      [M.name]:   name,
+      [M.status]: statusValue,
+    };
+    if (M.formFilled !== undefined) {
+      cellUpdates[M.formFilled] = `Form submitted: ${option}`;
+    }
+    await SheetService.updateContactCells(upsertResult.row, cellUpdates);
     return upsertResult;
   };
 
