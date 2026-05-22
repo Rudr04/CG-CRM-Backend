@@ -167,16 +167,16 @@ async function handleFlowReply(params) {
       p => p.name === config.WATI.CALLBACK_FORM_PARAMS.NAME && p.value
     );
 
-    if (hasCallbackForm) {
-      console.log('Callback form detected');
-      return await handleCallbackFormReply(customParams, phoneNumber);
-    }
-
     if (hasMcForm) {
       console.log('MC registration form detected');
       const formData = _extractFormDataFromContact(contactData.contact, phoneNumber);
       if (!formData) throw new Error('Required form data not found');
       return await handleFormSubmission(formData);
+    }
+
+    if (hasCallbackForm) {
+      console.log('Callback form detected');
+      return await handleCallbackFormReply(customParams, phoneNumber);
     }
 
     throw new Error('Unknown flow reply — no matching form params');
