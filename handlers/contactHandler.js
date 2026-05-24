@@ -450,21 +450,32 @@ async function triggerWatiOnboarding(phone) {
       console.log(`[Onboarding] ${phone} is converted/semi-converted (${status}) — skipping`);
       return;
     }
+
+    // Guard: skip if onboarding was triggered recently (dedup for simultaneous webhooks)
+    const lastOnboarding = existing.data.attributes?.onboardingTriggeredAt;
+    if (lastOnboarding) {
+      const elapsed = Date.now() - new Date(lastOnboarding).getTime();
+      if (elapsed < 60000) {
+        console.log(`[Onboarding] ${phone} already triggered ${Math.round(elapsed / 1000)}s ago — skipping`);
+        return;
+      }
+    }
   }
 
   const waId = phone;
 
+  // Stamp the trigger time FIRST — so the second call sees it
   FirestoreService.updateLead(phone, {
     'attributes.mc_form_filled': false,
     'attributes.callback_requested': false,
     'attributes.followUp_sent': false,
+    'attributes.onboardingTriggeredAt': new Date().toISOString(),
   }).catch(e => console.error(`[Firestore] init attributes: ${e.message}`));
 
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
     .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
 
   WatiService.startChatbot(waId, '6a0d8be4ad26a69870ac7847')
-    // .then(() => WatiService.startChatbot(waId, '69691e0302430341c43f1352'))
     .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
 
   TaskService.scheduleWebhookTask(
