@@ -160,6 +160,20 @@ async function sendRegistrationConfirmation(params) {
 
   if (!waId) throw new ValidationError('Phone number (wa_num) is required');
 
+  // Check if already approved — skip duplicate confirmation
+  try {
+    const contactData = await getContactDetails(waId);
+    const customParams = contactData?.contact?.customParams || [];
+    const mcApprove = customParams.find(p => p.name === 'mc_approve');
+    if (mcApprove && ['morning', 'evening'].includes(mcApprove.value?.toLowerCase())) {
+      console.log(`${LOG_PREFIX} ${waId} already approved (mc_approve=${mcApprove.value}) — skipping confirmation`);
+      return true;
+    }
+  } catch (e) {
+    // Contact not found or API error — proceed with sending
+    console.warn(`${LOG_PREFIX} Could not check mc_approve for ${waId}: ${e.message}`);
+  }
+
   const isEvening = params.option === config.FORM_OPTIONS.EVENING_OPTION;
   const choice = isEvening ? 'evening' : 'morning';
 
