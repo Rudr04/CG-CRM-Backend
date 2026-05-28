@@ -519,8 +519,8 @@ async function handleInactiveCheck(params) {
 
   // Mark inactive in Firestore
   await FirestoreService.updateLead(phone, {
-    status: 'Inactive',
-    agent: config.DEFAULTS.ROBO_AGENT,
+    status: 'Inactive', 
+    // agent: config.DEFAULTS.ROBO_AGENT,
   }, {
     action: 'marked_inactive', by: 'scheduler',
     details: { reason: 'no_response_48hrs' }
