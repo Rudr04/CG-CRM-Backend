@@ -422,7 +422,7 @@ async function handleScheduledFollowup(params) {
   TaskService.scheduleWebhookTask(
     `inactive-${phone}`,
     { eventType: 'scheduled_inactive_check', phone },
-    86400  // 24hrs after 3rd message (use 600 for testing)
+    config.CLOUD_TASKS.INACTIVE_LEAD_DELAY_SEC  // 24hrs after 1st message (use 600 for testing)
   ).catch(e => console.error(`[Tasks] schedule inactive check: ${e.message}`));
 
   console.log(`[FollowUp] Template sent to ${phone}`);
@@ -481,7 +481,7 @@ async function triggerWatiOnboarding(phone) {
   TaskService.scheduleWebhookTask(
     `followup-${phone}`,
     { eventType: config.EVENT_TYPES.SCHEDULED_FOLLOWUP, phone },
-    config.CLOUD_TASKS.FOLLOWUP_DELAY_SEC
+    config.CLOUD_TASKS.FOLLOWUP_DELAY_SEC // 3hrs after trigger (use 600 for testing)
   ).catch(e => console.error(`[Tasks] schedule followup: ${e.message}`));
 }
 
