@@ -512,8 +512,8 @@ async function handleInactiveCheck(params) {
 
   // Skip if already converted
   const status = lead.status || '';
-  if (config.CONVERTED_STATUSES.includes(status) || config.SEMI_CONVERTED_STATUSES.includes(status)) {
-    console.log(`[InactiveCheck] ${phone} converted — skipping`);
+  if (config.CONVERTED_STATUSES.includes(status) || config.SEMI_CONVERTED_STATUSES.includes(status) || status === 'Follow-Up') {
+    console.log(`[InactiveCheck] ${phone} is ${status} — skipping`);
     return { status: 'skipped', reason: 'already_converted' };
   }
 
