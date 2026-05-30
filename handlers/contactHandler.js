@@ -12,7 +12,7 @@ const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
 const PendingQueue     = require('../services/pendingQueue');
-const { shouldAssignRobo, deriveSource } = require('../utils/helpers');
+const { shouldAssignRobo, deriveSource, normalizePhone } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
 const config = require('../config');
 const TaskService = require('../services/taskService');
@@ -549,7 +549,7 @@ async function handleInactiveCheck(params) {
 //  HANDLE SCHOLARSHIP CLAIM (Gujarati / Hindi button reply)
 // ═════════════════════════════════════════════════════════════
 async function handleScholarshipClaim(params) {
-  const phone = normalizePhone(params.waId);
+  const phone = params.waId;
   const isGujarati = params.text.trim() === 'હા સ્કોલરશીપ ક્લેમ કરો';
 
   const message = isGujarati
