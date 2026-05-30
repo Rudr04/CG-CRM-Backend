@@ -254,7 +254,7 @@ module.exports = {
     LOCATION: 'asia-south1',
     QUEUE: 'leads-folloup',
     WEBHOOK_URL: 'https://cg-crm-backend-646797305264.asia-south1.run.app',
-    FOLLOWUP_DELAY_SEC: 10800,  // 24 hours in seconds
+    FOLLOWUP_DELAY_SEC: 10800,  // 03 hours in seconds
     INACTIVE_LEAD_DELAY_SEC: 72000, // 20 hours in seconds
   },
 
