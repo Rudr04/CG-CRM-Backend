@@ -556,7 +556,7 @@ async function handleScholarshipClaim(params) {
     ? `તમારી સ્પેશ્યલ સ્કોલરશીપ ઓફર ક્લેમ કરવા માટે કૃપા કરીને નીચે આપેલ ફોર્મ પૂર્ણ કરો.\n\n👇ફોર્મ ભરવું જરૂરી છે\nhttps://scholarship-form.cosmoguru.com/?num=${phone}&lan=guj`
     : `आपकी स्पेशल स्कॉलरशिप ऑफर को आगे बढ़ाने के लिए कृपया नीचे दिया गया फॉर्म पूरा करें\n\n👇 फॉर्म भरना अनिवार्य है\nhttps://scholarship-form.cosmoguru.com/?num=${phone}&lan=hin`;
 
-  await sendSessionMessage(phone, message);
+  await WatiService.sendSessionMessage(phone, message);
   console.log(`[Scholarship] ${isGujarati ? 'GUJ' : 'HIN'} form link sent to ${phone}`);
 
   return { status: 'success', language: isGujarati ? 'gujarati' : 'hindi' };
