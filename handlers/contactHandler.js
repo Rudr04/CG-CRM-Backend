@@ -475,7 +475,7 @@ async function triggerWatiOnboarding(phone) {
   WatiService.setContactAttribute(waId, 'mc_form_filled', 'FALSE')
     .catch(e => console.error(`[WATI] mc_form_filled: ${e.message}`));
 
-  WatiService.startChatbot(waId, '6a0d8be4ad26a69870ac7847')
+  WatiService.startChatbot(waId, '6a1be3f13110eff73fac587e')
     .catch(e => console.error(`[WATI] startChatbot chain: ${e.message}`));
 
   TaskService.scheduleWebhookTask(
