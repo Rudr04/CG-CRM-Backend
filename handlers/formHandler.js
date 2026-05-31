@@ -85,8 +85,8 @@ async function handleFormSubmission(params) {
   }).catch(e => console.error(`[Firestore] mc_form_filled: ${e.message}`));
 
   // WATI confirmation (only true side-effect — fire-and-forget)
-  // WatiService.sendRegistrationConfirmation(params)
-  //   .catch(e => console.error(`[WATI] confirmation: ${e.message}`));
+  WatiService.sendRegistrationConfirmation(params)
+    .catch(e => console.error(`[WATI] confirmation: ${e.message}`));
 
   return { status: 'form_update_success' };
 }
