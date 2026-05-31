@@ -19,7 +19,7 @@ const TaskService = require('../services/taskService');
 const { buildWriteBoth, tryWriteOrQueue } = require('../lib/writeBoth');
 
 const ONBOARDING_CHATBOTS = [
-  '6a0d8be4ad26a69870ac7847',
+  '6a1be3f13110eff73fac587e',
   '69691e0302430341c43f1352',
 ];
 
