@@ -533,8 +533,8 @@ async function handleInactiveCheck(params) {
       const colMap = await SheetService.getColumnMap(config.SHEETS.DSR);
       const M = colMap.map;
       await SheetService.updateContactCells(existing.row, {
-        [M.status]: 'Inactive',
-        [M.team]: config.DEFAULTS.ROBO_AGENT,
+        [M.status]: 'Inactive'
+        // [M.team]: config.DEFAULTS.ROBO_AGENT,
       });
     }
   } catch (e) {
