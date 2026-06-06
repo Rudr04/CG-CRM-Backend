@@ -358,19 +358,110 @@ async function handleRegistrationCheck(params) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  HANDLE USER LOGIN (unchanged — different sheet, attendance only)
+//  HANDLE USER LOGIN — MC Attendance (Firestore + Sheet)
+//
+//  Lookup: findLeadByPhoneExact (queries `phone` field)
+//  Path A: Found + has sheetRow → Firestore + DSR cell write
+//  Path B: Found + no sheetRow  → Firestore + MC Logged In sheet
+//  Path C: Not found            → createLead + MC Logged In sheet
 // ═════════════════════════════════════════════════════════════
 async function handleUserLogin(params) {
-  try {triggerWatiOnboarding 
-    console.log('User login event received from CosmoGuru Live');
+  try {
+    console.log('[Attendance] User login event received');
     const phone = params.data?.phone || '';
     const name  = params.data?.name || '';
     const loginTimestamp = params.data?.loginTimestamp || '';
 
     const phoneNumber = validatePhoneNumber(phone, { source: 'handleUserLogin' });
-    const result = await SheetService.updateAttendance(phoneNumber, name, loginTimestamp);
 
-    return { status: 'success', message: 'Attendance updated', ...result };
+    // Build attendance string
+    const loginDate = loginTimestamp ? new Date(loginTimestamp) : new Date();
+    const formattedTime = loginDate.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata', hour12: false,
+      hour: '2-digit', minute: '2-digit',
+    });
+    const attendanceValue = `Present ${formattedTime}`;
+
+    // ── Lookup by exact phone field ──────────────────────────
+    const lead = await FirestoreService.findLeadByPhoneExact(phoneNumber);
+
+    if (lead) {
+      const cgId = lead.data.cgId;
+      const sheetRow = lead.data.sheetRow;
+
+      // Update Firestore mcAttendance (cumulative)
+      const existingAttendance = lead.data.mcAttendance || '';
+      const newAttendance = existingAttendance
+        ? `${existingAttendance} | ${formattedTime}`
+        : attendanceValue;
+
+      await FirestoreService.updateLead(lead.data.phone, {
+        mcAttendance: newAttendance,
+      }, {
+        action: 'mc_attendance_marked',
+        by: 'system',
+        details: { time: formattedTime },
+      });
+
+      if (sheetRow) {
+        // ── Path A: Has sheetRow → write to DSR ──────────────
+        console.log(`[Attendance] Found ${cgId}, writing to DSR row ${sheetRow}`);
+        const sheetResult = await SheetService.updateMcAttendance(sheetRow, attendanceValue);
+
+        return {
+          status: 'success',
+          found: true,
+          path: 'dsr',
+          cgId,
+          sheetRow,
+          attendance: newAttendance,
+          message: 'MC Attendance updated in DSR',
+        };
+
+      } else {
+        // ── Path B: No sheetRow → MC Logged In ───────────────
+        console.log(`[Attendance] Found ${cgId} but no sheetRow, logging to MC Logged In`);
+        const sheetResult = await SheetService.appendToMcLoggedIn(cgId, phoneNumber, attendanceValue);
+
+        return {
+          status: 'success',
+          found: true,
+          path: 'mc_logged_in',
+          cgId,
+          attendance: newAttendance,
+          message: 'MC Attendance logged (no DSR row)',
+        };
+      }
+
+    } else {
+      // ── Path C: Not found → new lead + MC Logged In ────────
+      console.log(`[Attendance] Phone not in CRM: ${phoneNumber}, creating lead`);
+
+      const newLead = await FirestoreService.createLead({
+        phone: phoneNumber,
+        name: name || '',
+        source: 'mc_login',
+        status: 'Lead',
+        mcAttendance: attendanceValue,
+      });
+
+      if (!newLead) {
+        throw new Error('Failed to create lead for MC login');
+      }
+
+      const sheetResult = await SheetService.appendToMcLoggedIn(
+        newLead.cgId, phoneNumber, attendanceValue
+      );
+
+      return {
+        status: 'success',
+        found: false,
+        path: 'new_lead',
+        cgId: newLead.cgId,
+        attendance: attendanceValue,
+        message: 'New lead created and logged',
+      };
+    }
 
   } catch (error) {
     if (error instanceof ValidationError) throw error;

@@ -369,103 +369,87 @@ async function checkFirebaseWhitelist(phoneNumber) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  UPDATE ATTENDANCE (unchanged — different sheet)
+//  UPDATE MC ATTENDANCE — Direct cell write using sheetRow
+//
+//  @param {number} sheetRow — 1-based row number in DSR
+//  @param {string} attendanceValue — e.g. "Present 14:30"
+//  @returns {{ updated: boolean, attendance: string }}
 // ═════════════════════════════════════════════════════════════
-async function updateAttendance(phoneNumber, name, loginTimestamp) {
+async function updateMcAttendance(sheetRow, attendanceValue) {
   const api = await getSheets();
-  const sheetName = config.SHEETS.FIREBASE_WHITELIST;
+  const sheetName = config.SHEETS.DSR;
 
-  try {
-    const searchResponse = await api.spreadsheets.values.get({
-      spreadsheetId: config.SPREADSHEET_ID,
-      range: `${sheetName}!E2:F`
-    });
+  // Get column position for mcAttendance dynamically
+  const colMap = await getColumnMap(sheetName);
+  const mcAttColIndex = colMap.map.mcAttendance;
 
-    const searchRows = searchResponse.data.values || [];
-    let foundRow = null;
-    let fullRowData = null;
-
-    for (let i = 0; i < searchRows.length; i++) {
-      const numberCol = searchRows[i][0] || '';
-      const regiCol   = searchRows[i][1] || '';
-
-      if (phoneNumbersMatch(phoneNumber, numberCol) || phoneNumbersMatch(phoneNumber, regiCol)) {
-        foundRow = i + 2;
-        const fullRowResponse = await api.spreadsheets.values.get({
-          spreadsheetId: config.SPREADSHEET_ID,
-          range: `${sheetName}!A${foundRow}:L${foundRow}`
-        });
-        fullRowData = fullRowResponse.data.values?.[0] || [];
-        break;
-      }
-    }
-
-    const loginDate = new Date(loginTimestamp);
-    const formattedTime = loginDate.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit'
-    });
-
-    const buildAttendance = (current) =>
-      current ? `${current} | ${formattedTime}` : `Present ${formattedTime}`;
-
-    if (foundRow) {
-      // NOTE: These indices are for the OnlineAttendence sheet layout,
-      // NOT the DSR sheet. Do not use the DSR column map here.
-      const currentAttendance = fullRowData[11] || '';  // OnlineAttendence column L
-      const updatedAttendance = buildAttendance(currentAttendance);
-
-      await api.spreadsheets.values.update({
-        spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!L${foundRow}`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [[updatedAttendance]] }
-      });
-
-      return {
-        found: true, action: 'updated', row: foundRow,
-        name: fullRowData[3] || name, attendance: updatedAttendance,
-        message: 'Attendance marked as Present'
-      };
-
-    } else {
-      const allRowsResponse = await api.spreadsheets.values.get({
-        spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!A2:A`
-      });
-      const existingRows = allRowsResponse.data.values || [];
-      const nextRow = existingRows.length + 2;
-
-      const now = new Date();
-      const currentDate = formatDate(now);
-      const currentTime = now.toLocaleTimeString('en-IN', {
-        timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-      });
-      const attendanceValue = buildAttendance('');
-
-      const newRowData = [
-        '=ROW()-1', currentDate, currentTime, name,
-        phoneNumber, phoneNumber, '', 'CGI', '', '', '', attendanceValue
-      ];
-
-      await api.spreadsheets.values.append({
-        spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!A:L`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [newRowData] }
-      });
-
-      return {
-        found: false, action: 'created', row: nextRow,
-        name, attendance: attendanceValue,
-        message: 'New entry created with attendance marked'
-      };
-    }
-
-  } catch (error) {
-    console.error(`updateAttendance error: ${error.message}`);
-    throw error;
+  if (mcAttColIndex === undefined) {
+    throw new Error('updateMcAttendance: "MC Attendence" column not found in DSR headers. Add the header first.');
   }
+
+  const mcAttLetter = config.colLetter(mcAttColIndex);
+
+  // Read current value to append if already present
+  const currentRes = await api.spreadsheets.values.get({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!${mcAttLetter}${sheetRow}`,
+  });
+
+  const currentValue = (currentRes.data.values?.[0]?.[0] || '').trim();
+  const finalValue = currentValue
+    ? `${currentValue} | ${attendanceValue}`
+    : attendanceValue;
+
+  await api.spreadsheets.values.update({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!${mcAttLetter}${sheetRow}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[finalValue]] },
+  });
+
+  console.log(`[Sheet] MC Attendance at row ${sheetRow}: ${finalValue}`);
+  return { updated: true, attendance: finalValue };
 }
+
+
+// ═════════════════════════════════════════════════════════════
+//  APPEND TO MC LOGGED IN — For leads without sheetRow or
+//  not found in CRM at all.
+//  Fixed 4-column layout: CGID | Time | Number | Attendence
+//
+//  @param {string} cgId
+//  @param {string} phoneNumber
+//  @param {string} attendanceValue — e.g. "Present 14:30"
+//  @returns {{ row: number }}
+// ═════════════════════════════════════════════════════════════
+async function appendToMcLoggedIn(cgId, phoneNumber, attendanceValue) {
+  const api = await getSheets();
+  const sheetName = config.SHEETS.MC_LOGGED_IN;
+
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata', hour12: false,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+
+  const newRow = [cgId, time, phoneNumber, attendanceValue];
+
+  const appendRes = await api.spreadsheets.values.append({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!A:D`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [newRow] },
+  });
+
+  // Extract appended row number from response
+  const updatedRange = appendRes.data.updates?.updatedRange || '';
+  const rowMatch = updatedRange.match(/!A(\d+)/);
+  const row = rowMatch ? parseInt(rowMatch[1], 10) : -1;
+
+  console.log(`[Sheet] Appended to MC Logged In: ${cgId} / ${phoneNumber} at row ${row}`);
+  return { row };
+}
+
 
 // ═════════════════════════════════════════════════════════════
 //  ADD THREADED COMMENT — anchored to a specific cell
@@ -618,6 +602,7 @@ async function insertRowToSheet(spreadsheetId, tabName, leadData) {
     fulfillmentStatus: 'fulfillmentStatus',
     fulfillmentDate:   'fulfillmentDate',
     fulfillmentRemark: 'fulfillmentRemark',
+    mcAttendance:      'mcAttendance',
     formFilled:        'formFilled',
     callLog:           'callLog',
     // Sales review + payment transition fields
@@ -728,7 +713,8 @@ module.exports = {
   getColumnMap,
   rowToObject,
   checkFirebaseWhitelist,
-  updateAttendance,
+  updateMcAttendance,
+  appendToMcLoggedIn,
   insertRowToSheet,
   deleteRowFromSheet,
   addCellNote,

@@ -122,6 +122,7 @@ const FIELD_HEADERS = {
   fulfillmentStatus: 'Fulfillment Status',
   fulfillmentDate:   'Fulfillment Date',
   fulfillmentRemark: 'Fulfillment Remark',
+  mcAttendance:    'MC Attendence',
   // Added in Part 3A for Phase 3 Payment + Fulfillment sheets (wired in 3B)
   discount:          'Discount',
   finalPrice:        'Final Price',
@@ -246,7 +247,8 @@ module.exports = {
     DSR: 'Leads',
     PAID: 'Paid_Users',
     MANUAL_REVIEW: 'Manual_Review',
-    FIREBASE_WHITELIST: 'OnlineAttendence'
+    FIREBASE_WHITELIST: 'OnlineAttendence',
+    MC_LOGGED_IN: 'MC Logged In'
   },
 
   CLOUD_TASKS: {

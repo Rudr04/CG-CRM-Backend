@@ -138,6 +138,29 @@ async function findLeadByPhone(phone) {
   // Firestore network/permission errors throw naturally — no catch
 }
 
+/**
+ * Find lead by exact `phone` field match.
+ * Unlike findLeadByPhone (which uses phoneNormalized), this queries
+ * the raw `phone` field — works on both old (CG00xxx) and new docs.
+ *
+ * @param {string} phone — full phone with country code
+ * @returns {Promise<{ docId: string, data: Object } | null>}
+ */
+async function findLeadByPhoneExact(phone) {
+  const firestore = getDb();
+  if (!phone) return null;
+
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where('phone', '==', phone)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  const doc = snapshot.docs[0];
+  return { docId: doc.id, data: doc.data() };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  CRUD
@@ -219,6 +242,7 @@ async function createLead(leadData) {
     fulfillmentType: '',
     batchOrSlot: '',
     consultant: '',
+    mcAttendance: cleanString(leadData.mcAttendance),
     formFilled: '',
     callLog: '',
     // Pre-existing schema gap: scholarship/installment were in FIELD_HEADERS
@@ -372,6 +396,7 @@ async function createOrUpdateLead(leadData, historyEntry) {
 module.exports = {
   getDb,
   findLeadByPhone,
+  findLeadByPhoneExact,
   createLead,
   updateLead,
   addHistory,
