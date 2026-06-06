@@ -372,10 +372,10 @@ async function checkFirebaseWhitelist(phoneNumber) {
 //  UPDATE MC ATTENDANCE — Direct cell write using sheetRow
 //
 //  @param {number} sheetRow — 1-based row number in DSR
-//  @param {string} attendanceValue — e.g. "Present 14:30"
+//  @param {string} formattedTime — e.g. "14:30"
 //  @returns {{ updated: boolean, attendance: string }}
 // ═════════════════════════════════════════════════════════════
-async function updateMcAttendance(sheetRow, attendanceValue) {
+async function updateMcAttendance(sheetRow, formattedTime) {
   const api = await getSheets();
   const sheetName = config.SHEETS.DSR;
 
@@ -397,8 +397,8 @@ async function updateMcAttendance(sheetRow, attendanceValue) {
 
   const currentValue = (currentRes.data.values?.[0]?.[0] || '').trim();
   const finalValue = currentValue
-    ? `${currentValue} | ${attendanceValue}`
-    : attendanceValue;
+    ? `${currentValue} | ${formattedTime}`
+    : `Present ${formattedTime}`;
 
   await api.spreadsheets.values.update({
     spreadsheetId: config.SPREADSHEET_ID,
@@ -422,17 +422,57 @@ async function updateMcAttendance(sheetRow, attendanceValue) {
 //  @param {string} attendanceValue — e.g. "Present 14:30"
 //  @returns {{ row: number }}
 // ═════════════════════════════════════════════════════════════
-async function appendToMcLoggedIn(cgId, phoneNumber, attendanceValue) {
+async function appendToMcLoggedIn(cgId, phoneNumber, formattedTime) {
   const api = await getSheets();
   const sheetName = config.SHEETS.MC_LOGGED_IN;
 
+  // Check if phone already exists in Number column (C)
+  const numberRes = await api.spreadsheets.values.get({
+    spreadsheetId: config.SPREADSHEET_ID,
+    range: `${sheetName}!C2:C`,
+  });
+
+  const numbers = numberRes.data.values || [];
+  let existingRow = null;
+
+  for (let i = 0; i < numbers.length; i++) {
+    if ((numbers[i][0] || '').toString().trim() === phoneNumber.toString().trim()) {
+      existingRow = i + 2;
+      break;
+    }
+  }
+
+  if (existingRow) {
+    // Update existing — append time to Attendence column (D)
+    const currentRes = await api.spreadsheets.values.get({
+      spreadsheetId: config.SPREADSHEET_ID,
+      range: `${sheetName}!D${existingRow}`,
+    });
+
+    const currentValue = (currentRes.data.values?.[0]?.[0] || '').trim();
+    const finalValue = currentValue
+      ? `${currentValue} | ${formattedTime}`
+      : `Present ${formattedTime}`;
+
+    await api.spreadsheets.values.update({
+      spreadsheetId: config.SPREADSHEET_ID,
+      range: `${sheetName}!D${existingRow}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[finalValue]] },
+    });
+
+    console.log(`[Sheet] MC Logged In updated row ${existingRow}: ${finalValue}`);
+    return { row: existingRow, action: 'updated' };
+  }
+
+  // New row — insert
   const now = new Date();
   const time = now.toLocaleTimeString('en-IN', {
     timeZone: 'Asia/Kolkata', hour12: false,
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 
-  const newRow = [cgId, time, phoneNumber, attendanceValue];
+  const newRow = [cgId, time, phoneNumber, `Present ${formattedTime}`];
 
   const appendRes = await api.spreadsheets.values.append({
     spreadsheetId: config.SPREADSHEET_ID,
@@ -441,13 +481,12 @@ async function appendToMcLoggedIn(cgId, phoneNumber, attendanceValue) {
     requestBody: { values: [newRow] },
   });
 
-  // Extract appended row number from response
   const updatedRange = appendRes.data.updates?.updatedRange || '';
   const rowMatch = updatedRange.match(/!A(\d+)/);
   const row = rowMatch ? parseInt(rowMatch[1], 10) : -1;
 
-  console.log(`[Sheet] Appended to MC Logged In: ${cgId} / ${phoneNumber} at row ${row}`);
-  return { row };
+  console.log(`[Sheet] MC Logged In new row ${row}: ${phoneNumber}`);
+  return { row, action: 'inserted' };
 }
 
 

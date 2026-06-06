@@ -406,7 +406,7 @@ async function handleUserLogin(params) {
       if (sheetRow) {
         // ── Path A: Has sheetRow → write to DSR ──────────────
         console.log(`[Attendance] Found ${cgId}, writing to DSR row ${sheetRow}`);
-        const sheetResult = await SheetService.updateMcAttendance(sheetRow, attendanceValue);
+        const sheetResult = await SheetService.updateMcAttendance(sheetRow, formattedTime);
 
         return {
           status: 'success',
@@ -421,7 +421,7 @@ async function handleUserLogin(params) {
       } else {
         // ── Path B: No sheetRow → MC Logged In ───────────────
         console.log(`[Attendance] Found ${cgId} but no sheetRow, logging to MC Logged In`);
-        const sheetResult = await SheetService.appendToMcLoggedIn(cgId, phoneNumber, attendanceValue);
+        const sheetResult = await SheetService.appendToMcLoggedIn(cgId, phoneNumber, formattedTime);
 
         return {
           status: 'success',
@@ -450,7 +450,7 @@ async function handleUserLogin(params) {
       }
 
       const sheetResult = await SheetService.appendToMcLoggedIn(
-        newLead.cgId, phoneNumber, attendanceValue
+        newLead.cgId, phoneNumber, formattedTime
       );
 
       return {
