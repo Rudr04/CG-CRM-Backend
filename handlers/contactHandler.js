@@ -308,7 +308,7 @@ async function handleRegistrationCheck(params) {
 
     console.log(`Registration check for: ${waId}`);
 
-    const registeredNumber = await SheetService.checkFirebaseWhitelist(waId);
+    const registeredNumber = await FirebaseService.checkWhitelist(waId);
 
     if (registeredNumber) {
       console.log(`${waId} already whitelisted with registered number: ${registeredNumber}`);

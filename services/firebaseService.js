@@ -39,10 +39,39 @@ async function addToWhitelist(phoneNumber, name, source = 'unknown') {
 }
 
 
+async function checkWhitelist(phoneNumber) {
+  if (!config.FIREBASE.DATABASE_URL || !config.FIREBASE.SECRET) {
+    console.log(`${LOG_PREFIX} Credentials not configured, skipping`);
+    return null;
+  }
+
+  const sanitizedPhone = sanitizePhoneForFirebase(phoneNumber);
+  const url = `${config.FIREBASE.DATABASE_URL}whitelist/${sanitizedPhone}.json?auth=${config.FIREBASE.SECRET}`;
+
+  try {
+    const response = await axios.get(url, {
+      timeout: config.TIMEOUTS.FIREBASE
+    });
+
+    if (response.data) {
+      console.log(`${LOG_PREFIX} Whitelist match: ${sanitizedPhone}`);
+      return sanitizedPhone;
+    }
+
+    console.log(`${LOG_PREFIX} Not in whitelist: ${sanitizedPhone}`);
+    return null;
+  } catch (error) {
+    console.error(`${LOG_PREFIX} checkWhitelist error: ${error.message}`);
+    return null;
+  }
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  EXPORTS
 // ═══════════════════════════════════════════════════════════════════════════
 
 module.exports = {
-  addToWhitelist
+  addToWhitelist,
+  checkWhitelist
 };
