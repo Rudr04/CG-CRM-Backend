@@ -10,6 +10,9 @@ const { ExternalServiceError } = require('../lib/errorHandler');
 
 const LOG_PREFIX = '[Payment]';
 
+const { Firestore } = require('@google-cloud/firestore');
+const firestore = new Firestore();
+
 
 async function handlePayment(params) {
   try {
@@ -40,7 +43,16 @@ async function handlePayment(params) {
   }
 }
 
+async function captureRazorpayPayload(params) {
+  await firestore.collection('_debug_razorpay_webhooks').add({
+    receivedAt: new Date().toISOString(),
+    payload: params,
+  });
+  console.log('[Debug] Razorpay payload captured to _debug_razorpay_webhooks');
+  return { status: 'debug_captured' };
+}
 
 module.exports = {
-  handlePayment
+  handlePayment,
+  captureRazorpayPayload
 };
