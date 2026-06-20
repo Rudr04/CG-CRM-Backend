@@ -304,12 +304,12 @@ module.exports = {
   // ─── Serious Learner Pass ─────────────────────────────────────────────────
   SLP: {
     KEYWORDS: ['सीरियस लर्नर पास ₹99', 'SERIOUS LEARNER PASS ₹99'],
-    AMOUNT: 9900, // in paise (₹99.00)
+    AMOUNT: 9900,                                      // in INR paise (₹99.00)
     CURRENCY: 'INR',
     DESCRIPTION: 'CVPT Astrology Serious Learner Pass',
     REF_PREFIX: 'SLP',
-    EXPIRE_BY: 1751651340,
-    DATES: { GU: '2 July 2026', HI: '3 July 2026' },
+    EXPIRE_BY: 1751651999,                            // 4 July 2026 23:59:59 IST (all payment links)
+    DATES: { GU: '2 July 2026', HI: '3 July 2026' },  // Event dates for template message
     TEMPLATE: 'cacr_payconf_draft1',
   },
 
