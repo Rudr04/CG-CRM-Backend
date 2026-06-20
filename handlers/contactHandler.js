@@ -11,6 +11,7 @@ const FirestoreService = require('../services/firestoreService');
 const WatiService      = require('../services/watiService');
 const FirebaseService  = require('../services/firebaseService');
 const SmartfloService  = require('../services/smartfloService');
+const RazorpayService  = require('../services/razorpayService');
 const PendingQueue     = require('../services/pendingQueue');
 const { shouldAssignRobo, deriveSource, normalizePhone } = require('../utils/helpers');
 const { ValidationError, ExternalServiceError, validateRequired, validatePhoneNumber } = require('../lib/errorHandler');
@@ -656,6 +657,40 @@ async function handleScholarshipClaim(params) {
 }
 
 
+// ═════════════════════════════════════════════════════════════
+//  HANDLE SERIOUS LEARNER KEYWORD (SLP payment link)
+// ═════════════════════════════════════════════════════════════
+async function handleSeriousLearnerKeyword(params) {
+  const phone = validatePhoneNumber(params.waId, { source: 'handleSeriousLearnerKeyword' });
+
+  const isHindi = params.text.trim() === config.SLP.KEYWORDS[0];
+  const lang = isHindi ? 'HI' : 'GU';
+  const dateStr = isHindi ? '20260703' : '20260702';
+  const referenceId = `${config.SLP.REF_PREFIX}-${lang}-${dateStr}-${phone}`;
+
+  try {
+    const result = await RazorpayService.createPaymentLink({ phone, referenceId });
+    await WatiService.sendSessionMessage(
+      params.waId,
+      `Thank you! Please complete your payment using the link below:\n${result.short_url}`
+    );
+    console.log(`[SLP] Payment link sent to ${phone}: ${result.short_url}`);
+  } catch (error) {
+    console.error(`[SLP] Failed for ${phone}:`, error.message);
+    try {
+      await WatiService.sendSessionMessage(
+        params.waId,
+        'Sorry, we could not generate your payment link. Please try again shortly.'
+      );
+    } catch (msgErr) {
+      console.error(`[SLP] Fallback message also failed for ${phone}:`, msgErr.message);
+    }
+  }
+
+  return { status: 'success', message: 'SLP keyword processed' };
+}
+
+
 module.exports = {
   handleNewContact,
   handleInterestedUser,
@@ -669,5 +704,6 @@ module.exports = {
   handleScheduledFollowup,
   handleReactivation,
   handleInactiveCheck,
-  handleScholarshipClaim
+  handleScholarshipClaim,
+  handleSeriousLearnerKeyword
 };

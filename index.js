@@ -7,12 +7,16 @@
 
 require('dotenv').config();
 
+const crypto = require('crypto');
 const functions = require('@google-cloud/functions-framework');
+const { Firestore } = require('@google-cloud/firestore');
 const config = require('./config');
 const { routeEvent, shouldSkipDuplicate } = require('./lib/router');
 const { errorToResponse } = require('./lib/errorHandler');
 const PendingQueue = require('./services/pendingQueue');
 const { handleDashboardRequest } = require('./handlers/dashboardHandler');
+
+const _razorpayFirestore = new Firestore();
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -77,6 +81,47 @@ functions.http('webhook', async (req, res) => {
 
   if (req.method !== 'POST') {
     return res.status(405).send('Method not allowed');
+  }
+
+  // ─── Razorpay webhook (isolated from WATI flow) ─────────────────────────
+  if (req.headers['x-razorpay-signature']) {
+    try {
+      const expected = crypto
+        .createHmac('sha256', config.RAZORPAY.WEBHOOK_SECRET)
+        .update(req.rawBody)
+        .digest('hex');
+
+      if (expected !== req.headers['x-razorpay-signature']) {
+        console.warn('[Razorpay] Signature mismatch');
+        return res.status(401).json({ error: 'invalid_signature' });
+      }
+
+      const eventId = req.headers['x-razorpay-event-id'];
+      if (eventId) {
+        const docRef = _razorpayFirestore.collection('_razorpay_events').doc(eventId);
+        const snap = await docRef.get();
+        if (snap.exists) {
+          console.log('[Razorpay] Event already processed:', eventId);
+          return res.status(200).json({ status: 'already_processed' });
+        }
+      }
+
+      const params = req.body;
+      const { handled, result, routeName } = await routeEvent(params);
+      if (handled) console.log(`Handled by: ${routeName}`);
+
+      if (eventId) {
+        await _razorpayFirestore.collection('_razorpay_events').doc(eventId).set({
+          processedAt: new Date().toISOString(),
+          event: params.event,
+        });
+      }
+
+      return res.status(200).json({ status: 'success', ...(result || {}) });
+    } catch (error) {
+      console.error('[Razorpay] Handler failed:', error.message);
+      return res.status(500).json({ error: 'processing_failed' });
+    }
   }
 
   try {

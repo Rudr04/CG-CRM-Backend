@@ -293,6 +293,26 @@ module.exports = {
     PHASE: parseInt(process.env.FIRESTORE_PHASE || '2', 10)  // 1 = Sheet-first (parallel), 2 = Firestore-first
   },
 
+  // ─── Razorpay ─────────────────────────────────────────────────────────────
+  RAZORPAY: {
+    KEY_ID: process.env.RAZORPAY_KEY_ID || '',
+    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+    WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+    BASE_URL: 'https://api.razorpay.com/v1',
+  },
+
+  // ─── Serious Learner Pass ─────────────────────────────────────────────────
+  SLP: {
+    KEYWORDS: ['सीरियस लर्नर पास ₹99', 'SERIOUS LEARNER PASS ₹99'],
+    AMOUNT: 9900, // in paise (₹99.00)
+    CURRENCY: 'INR',
+    DESCRIPTION: 'CVPT Astrology Serious Learner Pass',
+    REF_PREFIX: 'SLP',
+    EXPIRE_BY: 1751651340,
+    DATES: { GU: '2 July 2026', HI: '3 July 2026' },
+    TEMPLATE: 'cacr_payconf_draft1',
+  },
+
   // ─── Smartflo (Calling) ───────────────────────────────────────────────────
   SMARTFLO: {
     API_KEY: process.env.SMARTFLO_API_KEY || '',

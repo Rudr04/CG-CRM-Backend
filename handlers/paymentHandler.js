@@ -6,6 +6,8 @@
 
 const FirestoreService = require('../services/firestoreService');
 const SheetService     = require('../services/sheetsService');
+const WatiService      = require('../services/watiService');
+const config           = require('../config');
 const { ExternalServiceError } = require('../lib/errorHandler');
 
 const LOG_PREFIX = '[Payment]';
@@ -52,7 +54,34 @@ async function captureRazorpayPayload(params) {
   return { status: 'debug_captured' };
 }
 
+async function handleSeriousLearnerPayment(params) {
+  const refId = params.payload?.payment_link?.entity?.reference_id || '';
+  if (!refId.startsWith('SLP-')) {
+    console.warn('[Payment] Non-SLP reference_id received:', refId);
+    return { status: 'ignored', message: 'Not an SLP payment' };
+  }
+
+  const parts = refId.split('-');
+  const lang = parts[1];
+  const phone = parts[3];
+  const dateString = config.SLP.DATES[lang];
+
+  if (!dateString) {
+    console.error('[Payment] Unknown SLP language code:', lang);
+    return { status: 'error', message: 'Unknown language code in reference_id' };
+  }
+
+  await WatiService.sendTemplateMessage(phone, config.SLP.TEMPLATE, [
+    { name: 'ProdOrSer_name', value: 'Serious Learner Pass' },
+    { name: 'cgi24_mc2_date', value: dateString },
+  ], 'CRM_SLP');
+
+  console.log(`[Payment] SLP confirmation sent to ${phone} for ${dateString}`);
+  return { status: 'success', message: 'SLP payment confirmed' };
+}
+
 module.exports = {
   handlePayment,
-  captureRazorpayPayload
+  captureRazorpayPayload,
+  handleSeriousLearnerPayment
 };
