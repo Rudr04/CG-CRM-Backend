@@ -303,8 +303,8 @@ module.exports = {
 
   // ─── Serious Learner Pass ─────────────────────────────────────────────────
   SLP: {
-    KEYWORDS: ['सीरियस लर्नर पास ₹99', 'SERIOUS LEARNER PASS ₹99'],
-    AMOUNT: 100,                                      // in INR paise (₹99.00)
+    KEYWORDS: ['प्रीमियम पास ₹99', 'પ્રીમિયમ પાસ ₹99'],
+    AMOUNT: 9900,                                      // in INR paise (₹99.00)
     CURRENCY: 'INR',
     DESCRIPTION: 'CVPT Astrology Serious Learner Pass',
     REF_PREFIX: 'SLP',

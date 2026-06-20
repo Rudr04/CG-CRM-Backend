@@ -686,7 +686,7 @@ async function handleSeriousLearnerKeyword(params) {
       console.error(`[SLP] Reference ${referenceId} link is cancelled — needs manual review`);
       await WatiService.sendSessionMessage(
         params.waId,
-        'Sorry, something went wrong with your payment link. Please contact support.'
+        'Sorry, something went wrong with your payment link. Please contact support - Call : 9727244666.'
       );
     } else {
       await WatiService.sendSessionMessage(
