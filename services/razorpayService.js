@@ -36,12 +36,33 @@ async function createPaymentLink({ phone, referenceId }) {
 
     const { short_url, id, reference_id } = response.data;
     console.log(`${LOG_PREFIX} Payment link created: ${id} (${reference_id})`);
-    return { short_url, id, reference_id };
+    return { short_url, id, reference_id, status: response.data.status };
   } catch (error) {
-    const message = error.response?.data?.error?.description || error.message;
+    const description = error.response?.data?.error?.description || '';
+    if (description.includes('already exists')) {
+      console.log(`${LOG_PREFIX} Duplicate reference_id ${referenceId} — fetching existing link`);
+      return await fetchPaymentLinkByReferenceId(referenceId);
+    }
+    const message = description || error.message;
     console.error(`${LOG_PREFIX} createPaymentLink failed: ${message}`);
     throw new ExternalServiceError(message, 'Razorpay');
   }
+}
+
+
+async function fetchPaymentLinkByReferenceId(referenceId) {
+  const response = await axios.get(
+    `${config.RAZORPAY.BASE_URL}/payment_links/?reference_id=${referenceId}`,
+    { auth: { username: config.RAZORPAY.KEY_ID, password: config.RAZORPAY.KEY_SECRET } }
+  );
+  const link = response.data.payment_links?.[0];
+  if (!link) return null;
+  return {
+    short_url: link.short_url,
+    id: link.id,
+    reference_id: link.reference_id,
+    status: link.status,
+  };
 }
 
 

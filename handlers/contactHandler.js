@@ -671,12 +671,31 @@ async function handleSeriousLearnerKeyword(params) {
 
   try {
     const result = await RazorpayService.createPaymentLink({ phone, referenceId });
-    await WatiService.sendSessionMessage(
-      params.waId,
-      `Thank you! Please complete your payment using the link below:\n${result.short_url}`
-    );
+
+    if (result.status === 'paid') {
+      await WatiService.sendSessionMessage(
+        params.waId,
+        'You have already completed this payment. Thank you!'
+      );
+    } else if (result.status === 'expired') {
+      await WatiService.sendSessionMessage(
+        params.waId,
+        'Sorry, this offer has ended.'
+      );
+    } else if (result.status === 'cancelled') {
+      console.error(`[SLP] Reference ${referenceId} link is cancelled — needs manual review`);
+      await WatiService.sendSessionMessage(
+        params.waId,
+        'Sorry, something went wrong with your payment link. Please contact support.'
+      );
+    } else {
+      await WatiService.sendSessionMessage(
+        params.waId,
+        `Thank you! Please complete your payment using the link below:\n${result.short_url}`
+      );
+    }
     const t1 = Date.now();
-    console.log(`[SLP] Payment link sent to ${phone}: ${result.short_url} (${t1 - t0} ms)`);
+    console.log(`[SLP] Processed ${phone} (status=${result.status}) in ${t1 - t0} ms`);
   } catch (error) {
     console.error(`[SLP] Failed for ${phone}:`, error.message);
     try {
