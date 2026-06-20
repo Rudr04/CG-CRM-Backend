@@ -308,7 +308,7 @@ module.exports = {
     CURRENCY: 'INR',
     DESCRIPTION: 'CVPT Astrology Serious Learner Pass',
     REF_PREFIX: 'SLP',
-    EXPIRE_BY: 1751651999,                            // 4 July 2026 23:59:59 IST (all payment links)
+    EXPIRE_BY: 1783189740,                            // 4 July 2026 23:59:59 IST (all payment links)
     DATES: { GU: '2 July 2026', HI: '3 July 2026' },  // Event dates for template message
     TEMPLATE: 'cacr_payconf_draft1',
   },
