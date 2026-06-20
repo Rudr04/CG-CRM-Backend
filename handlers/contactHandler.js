@@ -661,6 +661,7 @@ async function handleScholarshipClaim(params) {
 //  HANDLE SERIOUS LEARNER KEYWORD (SLP payment link)
 // ═════════════════════════════════════════════════════════════
 async function handleSeriousLearnerKeyword(params) {
+  const t0 = Date.now();  
   const phone = validatePhoneNumber(params.waId, { source: 'handleSeriousLearnerKeyword' });
 
   const isHindi = params.text.trim() === config.SLP.KEYWORDS[0];
@@ -674,7 +675,8 @@ async function handleSeriousLearnerKeyword(params) {
       params.waId,
       `Thank you! Please complete your payment using the link below:\n${result.short_url}`
     );
-    console.log(`[SLP] Payment link sent to ${phone}: ${result.short_url}`);
+    const t1 = Date.now();
+    console.log(`[SLP] Payment link sent to ${phone}: ${result.short_url} (${t1 - t0} ms)`);
   } catch (error) {
     console.error(`[SLP] Failed for ${phone}:`, error.message);
     try {
