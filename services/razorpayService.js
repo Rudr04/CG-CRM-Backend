@@ -17,7 +17,7 @@ async function createPaymentLink({ phone, referenceId }) {
     currency: config.SLP.CURRENCY,
     accept_partial: false,
     expire_by: config.SLP.EXPIRE_BY,
-    reference_id: '',
+    reference_id: referenceId,
     description: config.SLP.DESCRIPTION,
     customer: { contact: `+${phone}` },
     notify: { sms: false, email: false },
