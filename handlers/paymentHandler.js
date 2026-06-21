@@ -74,7 +74,7 @@ async function handlePremiumPassPayment(params) {
   await WatiService.sendTemplateMessage(phone, config.CVPT.TEMPLATE, [
     { name: 'ProdOrSer_name', value: 'Premium Pass' },
     { name: 'cgi24_mc2_date', value: dateString },
-  ], 'CRM_SLP');
+  ], 'CRM_PP_PAY_CONFIRM');
 
   await SheetService.upsertCVPTContact(phone, { premium: 'Paid', status: 'Paid' });
 

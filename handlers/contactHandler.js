@@ -700,31 +700,19 @@ async function handleCVPTKeyword(params) {
       } else {
         const message = lang === 'GU' ? 
           `⭐ Excellent Choice!
-          You have selected the CVPT Serious Learner Pass (₹99).
+You have selected the CVPT Serious Learner Pass (₹99).
 
-          🔗 Complete your payment using the link below:
-          ${result.short_url}
+*🔗 નીચે આપેલ લિંક દ્વારા પેમેન્ટ કરો:*
+${result.short_url}
 
-          Your Pass Includes:
-          ✅ Live Interactive Q&A 
-          ✅ Recording Access (1 Month)
-          ✅ Astrology Career Roadmap Blueprint (PDF) 
-          ✅ ₹99 CVPT એડમિશનમાં સમાવિષ્ટ ગણવામાં આવશે
+⏳ સફળ પેમેન્ટ પછી આગળની પ્રક્રિયા અને વેબિનાર સંબંધિત વિગતો તમારી સાથે શેર કરવામાં આવશે.` :
+`⭐ Excellent Choice!
+You have selected the *CVPT Serious Learner Pass (₹99)*.
 
-          ⏳ સફળ પેમેન્ટ પછી આગળની પ્રક્રિયા અને વેબિનાર સંબંધિત વિગતો તમારી સાથે શેર કરવામાં આવશે.` :
-          `⭐ Excellent Choice!
-          You have selected the *CVPT Serious Learner Pass (₹99)*.
+*🔗 नीचे दी गई लिंक से पेमेंट करें:*
+${result.short_url}
 
-          🔗 Complete your payment using the link below:
-          ${result.short_url}
-
-          Your Pass Includes:
-          ✅ Live Interactive Q&A
-          ✅ Recording Access (1 Month)
-          ✅ Astrology Career Roadmap Blueprint (PDF)
-          ✅ ₹99 CVPT Admission Fee में Adjust कर दिए जाएंगे
-
-          ⏳ सफल भुगतान के बाद आगे की प्रक्रिया और Webinar से संबंधित सभी जानकारी आपके साथ साझा की जाएगी.`;
+⏳ सफल भुगतान के बाद आगे की प्रक्रिया और Webinar से संबंधित सभी जानकारी आपके साथ साझा की जाएगी.`;
         await WatiService.sendSessionMessage(params.waId, message);
       }
 
