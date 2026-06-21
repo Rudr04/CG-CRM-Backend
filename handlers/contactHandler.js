@@ -700,14 +700,14 @@ async function handleCVPTKeyword(params) {
       } else {
         const message = lang === 'GU' ? 
           `⭐ Excellent Choice!
-You have selected the CVPT Premium Pass(₹99).
+You have selected the CVPT Premium Pass - ₹99.
 
 *🔗 નીચે આપેલ લિંક દ્વારા પેમેન્ટ કરો:*
 ${result.short_url}
 
 ⏳ સફળ પેમેન્ટ પછી આગળની પ્રક્રિયા અને વેબિનાર સંબંધિત વિગતો તમારી સાથે શેર કરવામાં આવશે.` :
 `⭐ Excellent Choice!
-You have selected the *CVPT Premium Pass (₹99)*.
+You have selected the *CVPT Premium Pass - ₹99*.
 
 *🔗 नीचे दी गई लिंक से पेमेंट करें:*
 ${result.short_url}
