@@ -312,11 +312,11 @@ module.exports = {
       CLASSIC: ['क्लासिक पास - FREE', 'કલાસિક પાસ FREE View Only'],
     },
     PREMIUM: {
-      AMOUNT: 9900,
+      AMOUNT: 9900,           // in paise (₹99.00)
       CURRENCY: 'INR',
-      DESCRIPTION: 'CVPT Astrology Premium Pass',
+      DESCRIPTION: 'CVPT Astrology Webinar Premium Pass',
       REF_PREFIX: 'PP',
-      EXPIRE_BY: 1751651999,
+      EXPIRE_BY: 1783189740,  // 4 July 2026 23:59:00 IST (Unix timestamp in seconds)
     },
     DATES: { GU: '2 July 2026', HI: '3 July 2026' },
     TEMPLATE: 'cacr_payconf_draft1',
