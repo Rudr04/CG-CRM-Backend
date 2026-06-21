@@ -308,7 +308,7 @@ module.exports = {
   // ─── CVPT Campaign (Premium + Classic Pass) ───────────────────────────────
   CVPT: {
     KEYWORDS: {
-      PREMIUM: ['सीरियस लर्नर पास ₹99', 'SERIOUS LEARNER PASS ₹99'],
+      PREMIUM: ['प्रीमियम पास ₹99', 'પ્રીમિયમ પાસ ₹99'],
       CLASSIC: ['क्लासिक पास - FREE', 'કલાસિક પાસ FREE View Only'],
     },
     PREMIUM: {
