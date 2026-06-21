@@ -13,12 +13,12 @@ async function createPaymentLink({ phone, referenceId }) {
   const url = `${config.RAZORPAY.BASE_URL}/payment_links/`;
 
   const body = {
-    amount: config.SLP.AMOUNT,
-    currency: config.SLP.CURRENCY,
+    amount: config.CVPT.PREMIUM.AMOUNT,
+    currency: config.CVPT.PREMIUM.CURRENCY,
     accept_partial: false,
-    expire_by: config.SLP.EXPIRE_BY,
+    expire_by: config.CVPT.PREMIUM.EXPIRE_BY,
     reference_id: referenceId,
-    description: config.SLP.DESCRIPTION,
+    description: config.CVPT.PREMIUM.DESCRIPTION,
     customer: { contact: `+${phone}` },
     notify: { sms: false, email: false },
     reminder_enable: false,

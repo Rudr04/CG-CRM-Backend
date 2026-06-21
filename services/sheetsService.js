@@ -745,6 +745,71 @@ async function deleteRowFromSheet(spreadsheetId, tabName, row) {
 }
 
 
+// ═════════════════════════════════════════════════════════════
+//  UPSERT CVPT CONTACT — Leads sheet for CVPT campaign
+// ═════════════════════════════════════════════════════════════
+async function upsertCVPTContact(phone, updates) {
+  const spreadsheetId = config.CVPT.SPREADSHEET_ID;
+  const tabName = config.CVPT.SHEET_NAME;
+  const api = await getSheets();
+  const colMap = await getColumnMap(tabName, spreadsheetId);
+  const M = colMap.map;
+
+  const existing = await findByPhone(phone, spreadsheetId, tabName);
+
+  if (existing) {
+    const cellUpdates = {};
+    for (const [fieldKey, value] of Object.entries(updates)) {
+      if (M[fieldKey] !== undefined && value !== undefined) {
+        cellUpdates[M[fieldKey]] = value;
+      }
+    }
+    if (Object.keys(cellUpdates).length > 0) {
+      await updateContactCells(existing.row, cellUpdates, spreadsheetId, tabName);
+    }
+    console.log(`[Sheet] CVPT updated row ${existing.row} for ${phone}`);
+    return { row: existing.row, action: 'updated' };
+  } else {
+    const now = new Date();
+    const date = formatDate(now);
+    const timeOpts = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const time = new Intl.DateTimeFormat('en-IN', timeOpts).format(now);
+
+    const totalCols = colMap.headerCount;
+    const rowData = new Array(totalCols).fill('');
+
+    const set = (fieldKey, value) => {
+      if (M[fieldKey] !== undefined) rowData[M[fieldKey]] = value;
+    };
+
+    set('date', date);
+    set('time', time);
+    set('number', phone);
+    set('team', 'Not Assigned');
+
+    for (const [fieldKey, value] of Object.entries(updates)) {
+      set(fieldKey, value);
+    }
+
+    const lastLetter = config.colLetter(totalCols - 1);
+    await api.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${tabName}!A:${lastLetter}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowData] },
+    });
+
+    const rowCountRes = await api.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${tabName}!A2:A`,
+    });
+    const nextRow = (rowCountRes.data.values || []).length + 1;
+    console.log(`[Sheet] CVPT appended row for ${phone}`);
+    return { row: nextRow, action: 'created' };
+  }
+}
+
+
 module.exports = {
   upsertContact,
   updateContactCells,
@@ -757,5 +822,6 @@ module.exports = {
   insertRowToSheet,
   deleteRowFromSheet,
   addCellNote,
-  addComment
+  addComment,
+  upsertCVPTContact
 };

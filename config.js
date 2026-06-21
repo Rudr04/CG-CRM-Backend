@@ -149,6 +149,10 @@ const FIELD_HEADERS = {
   adCampaign:        'Ad Campaign',
   adSet:             'Ad Set',
   cbReq:             'CB Req',
+  premium:           'Premium',
+  classic:           'Classic',
+  appDownloaded:     'App Downloaded',
+  priority:          'Priority',
 };
 
 
@@ -301,16 +305,28 @@ module.exports = {
     BASE_URL: 'https://api.razorpay.com/v1',
   },
 
-  // ─── Serious Learner Pass ─────────────────────────────────────────────────
-  SLP: {
-    KEYWORDS: ['प्रीमियम पास ₹99', 'પ્રીમિયમ પાસ ₹99'],
-    AMOUNT: 9900,                                      // in INR paise (₹99.00)
-    CURRENCY: 'INR',
-    DESCRIPTION: 'CVPT Astrology Serious Learner Pass',
-    REF_PREFIX: 'SLP',
-    EXPIRE_BY: 1783189740,                            // 4 July 2026 23:59:59 IST (all payment links)
-    DATES: { GU: '2 July 2026', HI: '3 July 2026' },  // Event dates for template message
+  // ─── CVPT Campaign (Premium + Classic Pass) ───────────────────────────────
+  CVPT: {
+    KEYWORDS: {
+      PREMIUM: ['सीरियस लर्नर पास ₹99', 'SERIOUS LEARNER PASS ₹99'],
+      CLASSIC: ['क्लासिक पास - FREE', 'કલાસિક પાસ FREE View Only'],
+    },
+    PREMIUM: {
+      AMOUNT: 9900,
+      CURRENCY: 'INR',
+      DESCRIPTION: 'CVPT Astrology Premium Pass',
+      REF_PREFIX: 'PP',
+      EXPIRE_BY: 1751651999,
+    },
+    DATES: { GU: '2 July 2026', HI: '3 July 2026' },
     TEMPLATE: 'cacr_payconf_draft1',
+    SPREADSHEET_ID: '1aFJOstIY46ZEif7Rw4lLKXKnlMryyTpKpAEmCFPOYIM',
+    SHEET_NAME: 'Leads',
+    GRP_LINK: {
+      ENABLED: false,
+      GU: 'https://join-wa.cosmoguru.com/g/',
+      HI: 'https://join-wa.cosmoguru.com/h/',
+    },
   },
 
   // ─── Smartflo (Calling) ───────────────────────────────────────────────────

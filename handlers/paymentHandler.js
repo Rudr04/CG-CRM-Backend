@@ -54,34 +54,36 @@ async function captureRazorpayPayload(params) {
   return { status: 'debug_captured' };
 }
 
-async function handleSeriousLearnerPayment(params) {
+async function handlePremiumPassPayment(params) {
   const refId = params.payload?.payment_link?.entity?.reference_id || '';
-  if (!refId.startsWith('SLP-')) {
-    console.warn('[Payment] Non-SLP reference_id received:', refId);
-    return { status: 'ignored', message: 'Not an SLP payment' };
+  if (!refId.startsWith('PP-')) {
+    console.warn('[PremiumPass] Non-PP reference_id received:', refId);
+    return { status: 'ignored', message: 'Not a Premium Pass payment' };
   }
 
   const parts = refId.split('-');
   const lang = parts[1];
   const phone = parts[3];
-  const dateString = config.SLP.DATES[lang];
+  const dateString = config.CVPT.DATES[lang];
 
   if (!dateString) {
-    console.error('[Payment] Unknown SLP language code:', lang);
+    console.error('[PremiumPass] Unknown language code:', lang);
     return { status: 'error', message: 'Unknown language code in reference_id' };
   }
 
-  await WatiService.sendTemplateMessage(phone, config.SLP.TEMPLATE, [
-    { name: 'ProdOrSer_name', value: 'Serious Learner Pass' },
+  await WatiService.sendTemplateMessage(phone, config.CVPT.TEMPLATE, [
+    { name: 'ProdOrSer_name', value: 'Premium Pass' },
     { name: 'cgi24_mc2_date', value: dateString },
   ], 'CRM_SLP');
 
-  console.log(`[Payment] SLP confirmation sent to ${phone} for ${dateString}`);
-  return { status: 'success', message: 'SLP payment confirmed' };
+  await SheetService.upsertCVPTContact(phone, { premium: 'Paid', status: 'Paid' });
+
+  console.log(`[PremiumPass] Confirmation sent to ${phone} for ${dateString}`);
+  return { status: 'success', message: 'Premium Pass payment confirmed' };
 }
 
 module.exports = {
   handlePayment,
   captureRazorpayPayload,
-  handleSeriousLearnerPayment
+  handlePremiumPassPayment
 };

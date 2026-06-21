@@ -240,6 +240,15 @@ async function handleCommunityJoin(params) {
   const phone = params.wa_num || '';
   if (!phone) throw new Error('Phone missing in community join');
 
+  // ── CVPT group join (params.group = 'g' or 'h') ──
+  if (params.group === 'g' || params.group === 'h') {
+    const lang = params.group === 'g' ? 'GU' : 'HI';
+    const grpStatus = lang === 'GU' ? 'Guj GrpJoined' : 'Hin GrpJoined';
+    await SheetService.upsertCVPTContact(phone, { classic: grpStatus, status: 'GrpJoined' });
+    console.log(`[ClassicPass] ${grpStatus} for ${phone}`);
+    return { message: 'CVPT group join tracked', status: grpStatus };
+  }
+
   // Look up lead: try Firestore first, then Sheet
   let currentStatus = '';
   let currentTeam   = config.DEFAULTS.TEAM;
@@ -658,57 +667,61 @@ async function handleScholarshipClaim(params) {
 
 
 // ═════════════════════════════════════════════════════════════
-//  HANDLE SERIOUS LEARNER KEYWORD (SLP payment link)
+//  HANDLE CVPT KEYWORD (Premium Pass payment link / Classic Pass group link)
 // ═════════════════════════════════════════════════════════════
-async function handleSeriousLearnerKeyword(params) {
-  const t0 = Date.now();  
-  const phone = validatePhoneNumber(params.waId, { source: 'handleSeriousLearnerKeyword' });
+async function handleCVPTKeyword(params) {
+  const phone = validatePhoneNumber(params.waId, { source: 'handleCVPTKeyword' });
+  const text = params.text.trim();
 
-  const isHindi = params.text.trim() === config.SLP.KEYWORDS[0];
-  const lang = isHindi ? 'HI' : 'GU';
-  const dateStr = isHindi ? '20260703' : '20260702';
-  const referenceId = `${config.SLP.REF_PREFIX}-${lang}-${dateStr}-${phone}`;
+  const isPremium = config.CVPT.KEYWORDS.PREMIUM.includes(text);
+  const isClassic = config.CVPT.KEYWORDS.CLASSIC.includes(text);
 
-  try {
-    const result = await RazorpayService.createPaymentLink({ phone, referenceId });
-
-    if (result.status === 'paid') {
-      await WatiService.sendSessionMessage(
-        params.waId,
-        'You have already completed this payment. Thank you!'
-      );
-    } else if (result.status === 'expired') {
-      await WatiService.sendSessionMessage(
-        params.waId,
-        'Sorry, this offer has ended.'
-      );
-    } else if (result.status === 'cancelled') {
-      console.error(`[SLP] Reference ${referenceId} link is cancelled — needs manual review`);
-      await WatiService.sendSessionMessage(
-        params.waId,
-        'Sorry, something went wrong with your payment link. Please contact support - Call : 9727244666.'
-      );
-    } else {
-      await WatiService.sendSessionMessage(
-        params.waId,
-        `Thank you! Please complete your payment using the link below:\n${result.short_url}`
-      );
-    }
-    const t1 = Date.now();
-    console.log(`[SLP] Processed ${phone} (status=${result.status}) in ${t1 - t0} ms`);
-  } catch (error) {
-    console.error(`[SLP] Failed for ${phone}:`, error.message);
-    try {
-      await WatiService.sendSessionMessage(
-        params.waId,
-        'Sorry, we could not generate your payment link. Please try again shortly.'
-      );
-    } catch (msgErr) {
-      console.error(`[SLP] Fallback message also failed for ${phone}:`, msgErr.message);
-    }
+  let lang;
+  if (isPremium) {
+    lang = text === config.CVPT.KEYWORDS.PREMIUM[0] ? 'HI' : 'GU';
+  } else {
+    lang = text === config.CVPT.KEYWORDS.CLASSIC[0] ? 'HI' : 'GU';
   }
 
-  return { status: 'success', message: 'SLP keyword processed' };
+  if (isPremium) {
+    const dateStr = lang === 'HI' ? '20260703' : '20260702';
+    const referenceId = `${config.CVPT.PREMIUM.REF_PREFIX}-${lang}-${dateStr}-${phone}`;
+
+    try {
+      const result = await RazorpayService.createPaymentLink({ phone, referenceId });
+
+      if (result.status === 'paid') {
+        await WatiService.sendSessionMessage(params.waId, 'You have already completed this payment. Thank you!');
+      } else if (result.status === 'expired') {
+        await WatiService.sendSessionMessage(params.waId, 'Sorry, this offer has ended.');
+      } else if (result.status === 'cancelled') {
+        console.error(`[PremiumPass] Reference ${referenceId} link is cancelled`);
+        await WatiService.sendSessionMessage(params.waId, 'Sorry, something went wrong with your payment link. Please contact support.');
+      } else {
+        await WatiService.sendSessionMessage(params.waId, `Thank you! Please complete your payment using the link below:\n${result.short_url}`);
+      }
+
+      await SheetService.upsertCVPTContact(phone, { premium: 'PayLink Sent', status: 'Lead' });
+
+    } catch (error) {
+      console.error(`[PremiumPass] Failed for ${phone}:`, error.message);
+      try {
+        await WatiService.sendSessionMessage(params.waId, 'Sorry, we could not generate your payment link. Please try again shortly.');
+      } catch (msgErr) {
+        console.error(`[PremiumPass] Fallback message also failed:`, msgErr.message);
+      }
+    }
+
+  } else if (isClassic) {
+    if (config.CVPT.GRP_LINK.ENABLED) {
+      const linkBase = lang === 'GU' ? config.CVPT.GRP_LINK.GU : config.CVPT.GRP_LINK.HI;
+      await WatiService.sendSessionMessage(params.waId, `Join the group using the link below:\n${linkBase}${phone}`);
+    }
+
+    await SheetService.upsertCVPTContact(phone, { classic: 'GrpLink Sent', status: 'Lead' });
+  }
+
+  return { status: 'success', message: 'CVPT keyword processed' };
 }
 
 
@@ -726,5 +739,5 @@ module.exports = {
   handleReactivation,
   handleInactiveCheck,
   handleScholarshipClaim,
-  handleSeriousLearnerKeyword
+  handleCVPTKeyword
 };
