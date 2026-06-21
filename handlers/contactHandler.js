@@ -698,7 +698,34 @@ async function handleCVPTKeyword(params) {
         console.error(`[PremiumPass] Reference ${referenceId} link is cancelled`);
         await WatiService.sendSessionMessage(params.waId, 'Sorry, something went wrong with your payment link. Please contact support.');
       } else {
-        await WatiService.sendSessionMessage(params.waId, `Thank you! Please complete your payment using the link below:\n${result.short_url}`);
+        const message = lang === 'GU' ? 
+          `⭐ Excellent Choice!
+          You have selected the CVPT Serious Learner Pass (₹99).
+
+          🔗 Complete your payment using the link below:
+          ${result.short_url}
+
+          Your Pass Includes:
+          ✅ Live Interactive Q&A 
+          ✅ Recording Access (1 Month)
+          ✅ Astrology Career Roadmap Blueprint (PDF) 
+          ✅ ₹99 CVPT એડમિશનમાં સમાવિષ્ટ ગણવામાં આવશે
+
+          ⏳ સફળ પેમેન્ટ પછી આગળની પ્રક્રિયા અને વેબિનાર સંબંધિત વિગતો તમારી સાથે શેર કરવામાં આવશે.` :
+          `⭐ Excellent Choice!
+          You have selected the *CVPT Serious Learner Pass (₹99)*.
+
+          🔗 Complete your payment using the link below:
+          ${result.short_url}
+
+          Your Pass Includes:
+          ✅ Live Interactive Q&A
+          ✅ Recording Access (1 Month)
+          ✅ Astrology Career Roadmap Blueprint (PDF)
+          ✅ ₹99 CVPT Admission Fee में Adjust कर दिए जाएंगे
+
+          ⏳ सफल भुगतान के बाद आगे की प्रक्रिया और Webinar से संबंधित सभी जानकारी आपके साथ साझा की जाएगी.`;
+        await WatiService.sendSessionMessage(params.waId, message);
       }
 
       await SheetService.upsertCVPTContact(phone, { premium: 'PayLink Sent', status: 'Lead' });
@@ -718,7 +745,7 @@ async function handleCVPTKeyword(params) {
       await WatiService.sendSessionMessage(params.waId, `Join the group using the link below:\n${linkBase}${phone}`);
     }
 
-    await SheetService.upsertCVPTContact(phone, { classic: 'GrpLink Sent', status: 'Lead' });
+    await SheetService.upsertCVPTContact(phone, { classic: lang === 'GU' ? 'Guj GrpLink Sent' : 'Hin GrpLink Sent', status: 'Lead' });
   }
 
   return { status: 'success', message: 'CVPT keyword processed' };
