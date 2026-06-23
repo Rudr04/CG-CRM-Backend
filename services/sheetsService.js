@@ -748,7 +748,7 @@ async function deleteRowFromSheet(spreadsheetId, tabName, row) {
 // ═════════════════════════════════════════════════════════════
 //  UPSERT CVPT CONTACT — Leads sheet for CVPT campaign
 // ═════════════════════════════════════════════════════════════
-async function upsertCVPTContact(phone, updates) {
+async function upsertCVPTContact(phone, updates, name = '') {
   const spreadsheetId = config.CVPT.SPREADSHEET_ID;
   const tabName = config.CVPT.SHEET_NAME;
   const api = await getSheets();
@@ -785,6 +785,7 @@ async function upsertCVPTContact(phone, updates) {
     set('date', date);
     set('time', time);
     set('number', phone);
+    set('name', name);
     set('team', 'Not Assigned');
 
     for (const [fieldKey, value] of Object.entries(updates)) {
@@ -792,23 +793,21 @@ async function upsertCVPTContact(phone, updates) {
     }
 
     const lastLetter = config.colLetter(totalCols - 1);
-    await api.spreadsheets.values.append({
+    const appendRes = await api.spreadsheets.values.append({
       spreadsheetId,
       range: `${tabName}!A:${lastLetter}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] },
     });
 
-    const rowCountRes = await api.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${tabName}!A2:A`,
-    });
-    const nextRow = (rowCountRes.data.values || []).length + 1;
-    console.log(`[Sheet] CVPT appended row for ${phone}`);
-    return { row: nextRow, action: 'created' };
+    const updatedRange = appendRes.data.updates?.updatedRange || '';
+    const rowMatch = updatedRange.match(/(\d+)(?::\w+\d+)?$/);
+    const appendedRow = rowMatch ? parseInt(rowMatch[1]) : null;
+
+    console.log(`[Sheet] CVPT appended row ${appendedRow} for ${phone}`);
+    return { row: appendedRow, action: 'created' };
   }
 }
-
 
 module.exports = {
   upsertContact,

@@ -76,7 +76,7 @@ async function handlePremiumPassPayment(params) {
     { name: 'cgi24_mc2_date', value: dateString },
   ], 'CRM_PP_PAY_CONFIRM');
 
-  await SheetService.upsertCVPTContact(phone, { premium: 'Paid', status: 'Paid' });
+  await SheetService.upsertCVPTContact(phone, { premium: lang === 'GU' ? 'Guj Paid' : 'Hin Paid', status: 'Paid' });
 
   console.log(`[PremiumPass] Confirmation sent to ${phone} for ${dateString}`);
   return { status: 'success', message: 'Premium Pass payment confirmed' };

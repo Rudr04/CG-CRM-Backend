@@ -716,7 +716,7 @@ ${result.short_url}
         await WatiService.sendSessionMessage(params.waId, message);
       }
 
-      await SheetService.upsertCVPTContact(phone, { premium: 'PayLink Sent', status: 'Lead' });
+      await SheetService.upsertCVPTContact(phone, { premium: lang === 'GU' ? 'Guj PayLink Sent' : 'Hin PayLink Sent', status: 'Lead' }, params.name);
 
     } catch (error) {
       console.error(`[PremiumPass] Failed for ${phone}:`, error.message);
@@ -733,7 +733,7 @@ ${result.short_url}
       await WatiService.sendSessionMessage(params.waId, `Join the group using the link below:\n${linkBase}${phone}`);
     }
 
-    await SheetService.upsertCVPTContact(phone, { classic: lang === 'GU' ? 'Guj GrpLink Sent' : 'Hin GrpLink Sent', status: 'Lead' });
+    await SheetService.upsertCVPTContact(phone, { classic: lang === 'GU' ? 'Guj GrpLink Sent' : 'Hin GrpLink Sent', status: 'Lead' }, params.name);
   }
 
   return { status: 'success', message: 'CVPT keyword processed' };
