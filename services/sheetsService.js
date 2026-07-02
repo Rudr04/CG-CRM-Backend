@@ -375,14 +375,14 @@ async function checkFirebaseWhitelist(phoneNumber) {
 //  @param {string} formattedTime — e.g. "14:30"
 //  @returns {{ updated: boolean, attendance: string }}
 // ═════════════════════════════════════════════════════════════
-async function updateMcAttendance(sheetRow, formattedTime, spreadsheetId = config.SPREADSHEET_ID, tabName = config.SHEETS.DSR) {
+async function updateMcAttendance(sheetRow, formattedTime, spreadsheetId = config.SPREADSHEET_ID, tabName = config.SHEETS.DSR, fieldKey = 'mcAttendance') {
   const api = await getSheets();
 
   const colMap = await getColumnMap(tabName, spreadsheetId);
-  const mcAttColIndex = colMap.map.mcAttendance ?? colMap.map.attendance;
+  const mcAttColIndex = colMap.map[fieldKey];
 
   if (mcAttColIndex === undefined) {
-    throw new Error('updateMcAttendance: Attendance column not found in headers.');
+    throw new Error(`updateMcAttendance: "${fieldKey}" column not found in ${tabName} headers. Available keys: ${Object.keys(colMap.map).join(', ')}`);
   }
 
   const mcAttLetter = config.colLetter(mcAttColIndex);

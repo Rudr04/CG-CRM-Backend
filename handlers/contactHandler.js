@@ -418,7 +418,7 @@ async function handleUserLogin(params) {
         const existing = await SheetService.findByPhone(phoneNumber, config.CVPT.SPREADSHEET_ID, config.CVPT.SHEET_NAME);
         if (existing) {
           console.log(`[Attendance] CVPT found ${cgId} at row ${existing.row}`);
-          await SheetService.updateMcAttendance(existing.row, formattedTime, config.CVPT.SPREADSHEET_ID, config.CVPT.SHEET_NAME);
+          await SheetService.updateMcAttendance(existing.row, formattedTime, config.CVPT.SPREADSHEET_ID, config.CVPT.SHEET_NAME, 'attendance');
           return {
             status: 'success',
             found: true,
