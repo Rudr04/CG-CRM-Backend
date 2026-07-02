@@ -123,6 +123,7 @@ const FIELD_HEADERS = {
   fulfillmentDate:   'Fulfillment Date',
   fulfillmentRemark: 'Fulfillment Remark',
   mcAttendance:    'MC Attendence',
+  attendance:      'Attendance',
   // Added in Part 3A for Phase 3 Payment + Fulfillment sheets (wired in 3B)
   discount:          'Discount',
   finalPrice:        'Final Price',
@@ -322,6 +323,7 @@ module.exports = {
     TEMPLATE: 'cacr_payconf_draft1',
     SPREADSHEET_ID: '1aFJOstIY46ZEif7Rw4lLKXKnlMryyTpKpAEmCFPOYIM',
     SHEET_NAME: 'Leads',
+    ATTENDANCE_ENABLED: true,  // true = CVPT Leads sheet, false = DSR sheet (old)
     GRP_LINK: {
       ENABLED: false,
       GU: 'https://join-wa.cosmoguru.com/g/',

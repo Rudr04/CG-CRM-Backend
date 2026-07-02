@@ -413,7 +413,35 @@ async function handleUserLogin(params) {
         details: { time: formattedTime },
       });
 
-      if (sheetRow) {
+      if (config.CVPT.ATTENDANCE_ENABLED) {
+        // ── CVPT path: look up row in CVPT Leads sheet by phone ──
+        const existing = await SheetService.findByPhone(phoneNumber, config.CVPT.SPREADSHEET_ID, config.CVPT.SHEET_NAME);
+        if (existing) {
+          console.log(`[Attendance] CVPT found ${cgId} at row ${existing.row}`);
+          await SheetService.updateMcAttendance(existing.row, formattedTime, config.CVPT.SPREADSHEET_ID, config.CVPT.SHEET_NAME);
+          return {
+            status: 'success',
+            found: true,
+            path: 'cvpt',
+            cgId,
+            sheetRow: existing.row,
+            attendance: newAttendance,
+            message: 'MC Attendance updated in CVPT',
+          };
+        } else {
+          console.log(`[Attendance] CVPT row not found for ${phoneNumber}, creating`);
+          const newRow = await SheetService.upsertCVPTContact(phoneNumber, { attendance: `Present ${formattedTime}` }, name);
+          return {
+            status: 'success',
+            found: true,
+            path: 'cvpt',
+            cgId,
+            sheetRow: newRow.row,
+            attendance: `Present ${formattedTime}`,
+            message: 'MC Attendance created in CVPT',
+          };
+        }
+      } else if (sheetRow) {
         // ── Path A: Has sheetRow → write to DSR ──────────────
         console.log(`[Attendance] Found ${cgId}, writing to DSR row ${sheetRow}`);
         const sheetResult = await SheetService.updateMcAttendance(sheetRow, formattedTime);

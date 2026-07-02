@@ -375,24 +375,21 @@ async function checkFirebaseWhitelist(phoneNumber) {
 //  @param {string} formattedTime — e.g. "14:30"
 //  @returns {{ updated: boolean, attendance: string }}
 // ═════════════════════════════════════════════════════════════
-async function updateMcAttendance(sheetRow, formattedTime) {
+async function updateMcAttendance(sheetRow, formattedTime, spreadsheetId = config.SPREADSHEET_ID, tabName = config.SHEETS.DSR) {
   const api = await getSheets();
-  const sheetName = config.SHEETS.DSR;
 
-  // Get column position for mcAttendance dynamically
-  const colMap = await getColumnMap(sheetName);
-  const mcAttColIndex = colMap.map.mcAttendance;
+  const colMap = await getColumnMap(tabName, spreadsheetId);
+  const mcAttColIndex = colMap.map.mcAttendance ?? colMap.map.attendance;
 
   if (mcAttColIndex === undefined) {
-    throw new Error('updateMcAttendance: "MC Attendence" column not found in DSR headers. Add the header first.');
+    throw new Error('updateMcAttendance: Attendance column not found in headers.');
   }
 
   const mcAttLetter = config.colLetter(mcAttColIndex);
 
-  // Read current value to append if already present
   const currentRes = await api.spreadsheets.values.get({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!${mcAttLetter}${sheetRow}`,
+    spreadsheetId,
+    range: `${tabName}!${mcAttLetter}${sheetRow}`,
   });
 
   const currentValue = (currentRes.data.values?.[0]?.[0] || '').trim();
@@ -401,13 +398,13 @@ async function updateMcAttendance(sheetRow, formattedTime) {
     : `Present ${formattedTime}`;
 
   await api.spreadsheets.values.update({
-    spreadsheetId: config.SPREADSHEET_ID,
-    range: `${sheetName}!${mcAttLetter}${sheetRow}`,
+    spreadsheetId,
+    range: `${tabName}!${mcAttLetter}${sheetRow}`,
     valueInputOption: 'RAW',
     requestBody: { values: [[finalValue]] },
   });
 
-  console.log(`[Sheet] MC Attendance at row ${sheetRow}: ${finalValue}`);
+  console.log(`[Sheet] Attendance at row ${sheetRow}: ${finalValue}`);
   return { updated: true, attendance: finalValue };
 }
 
